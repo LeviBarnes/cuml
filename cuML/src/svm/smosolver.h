@@ -111,7 +111,7 @@ public:
       ws.Select(f, alpha, y, C);
       math_t * cacheTile = cache.GetTile(ws.idx); 
       
-      SmoBlockSolve<math_t, 1024><<<1, n_ws>>>(y, n_ws, alpha, delta_alpha, f, cacheTile,
+      SmoBlockSolve<math_t, 1024><<<1, n_ws>>>(y, n_rows, alpha, n_ws, delta_alpha, f, cacheTile,
                                   ws.idx, C, tol, return_buff);
       updateHost(host_return_buff, return_buff, 2);
         

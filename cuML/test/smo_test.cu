@@ -147,7 +147,79 @@ TEST(SmoSolverTest, KernelCacheTest) {
     CUDA_CHECK(cudaFree(ws_idx_dev));
 }
 
-TEST(SmoSolverTest, SmoBlockSolveTest) {
+// test a single iteration of the block solver
+TEST(SmoSolverTest, SmoBlockSolveTest1) {
+  int n_rows = 4;
+  int n_cols = 2;
+  int n_ws = n_rows;
+    
+
+  int *ws_idx_dev;
+  allocate(ws_idx_dev, n_ws);
+  float *y_dev;
+  allocate(y_dev, n_rows);
+  float *f_dev;
+  allocate(f_dev, n_rows);
+  float *alpha_dev;
+  allocate(alpha_dev, n_rows, true);
+  float *delta_alpha_dev;
+  allocate(delta_alpha_dev, n_ws, true);
+  float *kernel_dev;
+  allocate(kernel_dev, n_ws*n_rows);
+  float *return_buff_dev;
+  allocate(return_buff_dev, 2);
+    
+  int ws_idx_host[] = {0, 1, 2, 3};
+  updateDevice(ws_idx_dev, ws_idx_host, n_ws);
+  
+  float y_host[] = {1, 1, -1, -1};
+  updateDevice(y_dev, y_host, n_rows);
+
+  float f_host[] = {0.4, 0.3, 0.5, 0.1};
+  updateDevice(f_dev, f_host, n_rows);
+
+  float kernel_host[] = {
+      26, 32, 38, 44,
+      32, 40, 48, 56,
+      38, 48, 58, 68,
+      44, 56, 68, 80
+  };
+  
+  updateDevice(kernel_dev, kernel_host, n_ws*n_rows);
+
+  SmoBlockSolve<float, 1024><<<1, n_ws>>>(y_dev, n_rows, alpha_dev, n_ws, 
+      delta_alpha_dev, f_dev, kernel_dev, ws_idx_dev,
+      1.5f, 1e-3f, return_buff_dev, 1);
+  
+  CUDA_CHECK(cudaPeekAtLastError());
+  
+  float return_buff[2];
+  updateHost(return_buff, return_buff_dev, 2);
+  EXPECT_FLOAT_EQ(return_buff[0], 0.2f) << return_buff[0];
+  EXPECT_EQ(return_buff[1], 1) << "Number of iterations ";
+  
+  float host_alpha[4], host_dalpha[4];
+  updateHost(host_alpha, alpha_dev, n_rows);
+  updateHost(host_dalpha, delta_alpha_dev, n_ws);
+  
+  for (int i=0; i<n_ws; i++) {
+      EXPECT_FLOAT_EQ(host_alpha[i], host_dalpha[i]) << "alpha and delta alpha " << i;
+  }
+  float alpha_expected[] = {0, 0.1f, 0.1f, 0};
+  for (int i=0; i<n_rows; i++) {
+      EXPECT_FLOAT_EQ(host_alpha[i], alpha_expected[i]) << "alpha " << i;
+  }
+  CUDA_CHECK(cudaFree(y_dev));
+  CUDA_CHECK(cudaFree(f_dev));
+  CUDA_CHECK(cudaFree(ws_idx_dev));
+  CUDA_CHECK(cudaFree(alpha_dev));
+  CUDA_CHECK(cudaFree(delta_alpha_dev));
+  CUDA_CHECK(cudaFree(kernel_dev));
+  CUDA_CHECK(cudaFree(return_buff_dev));
+}
+
+/*
+TEST(SmoSolverTest, SmoBlockSolveTest2) {
   int n_rows = 6;
   int n_cols = 2;
   int n_ws = n_rows;
@@ -193,7 +265,7 @@ TEST(SmoSolverTest, SmoBlockSolveTest) {
   
   updateDevice(kernel_dev, kernel_host, n_ws*n_rows);
 
-  SmoBlockSolve<float, 1024><<<1, n_ws>>>(y_dev, n_ws, alpha_dev, 
+  SmoBlockSolve<float, 1024><<<1, n_ws>>>(y_dev, n_rows, alpha_dev, n_ws, 
       delta_alpha_dev, f_dev, kernel_dev, ws_idx_dev,
       1.5f, 1e-3f, return_buff_dev);
   
@@ -212,6 +284,7 @@ TEST(SmoSolverTest, SmoBlockSolveTest) {
   CUDA_CHECK(cudaFree(kernel_dev));
   CUDA_CHECK(cudaFree(return_buff_dev));
 }
+*/
 /*TEST_F(SmoSolverTestF, SelectWorkingSetTest) {
   ASSERT_LT(1, 2);
 }*/
