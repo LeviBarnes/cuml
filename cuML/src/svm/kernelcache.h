@@ -57,9 +57,9 @@ __global__ void collect_rows(math_t *x, int n_rows, int n_cols,
 * @brief Buffer to store a kernel tile
 * 
 * We calculate the kernel matrix for the vectors in the working set.
-* For every vector x_i in the working set, we alwas calculate a full row of the kernel matrix K(x_i, x_j), j=1..n_rows.
+* For every vector x_i in the working set, we alwas calculate a full row of the kernel matrix K(x_j, x_i), j=1..n_rows.
 * 
-* A kernel tile stores all the kernel rows for the working, i.e.  K(x_i, x_j) for all i in the working set, and j in 1..n_rows.
+* A kernel tile stores all the kernel rows for the working set, i.e.  K(x_j, x_i) for all i in the working set, and j in 1..n_rows.
 * 
 * Currently we just buffer the kernel values before we call the SmoBlockSolver.
 * In the future we probably should can keep a larger cache and use that to avoid repeated kernel calculations.
@@ -82,7 +82,7 @@ public:
     : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
   {
     allocate(x_ws, n_ws*n_cols);
-    allocate(host_x, n_rows*n_cols);
+    host_x = new math_t[n_rows*n_rows];
     allocate(tile, n_rows*n_ws);
     allocate(ws_idx_prev, n_ws);
   };
@@ -90,14 +90,14 @@ public:
   ~KernelCache() {
     CUDA_CHECK(cudaFree(tile));
     CUDA_CHECK(cudaFree(x_ws));
-    CUDA_CHECK(cudaFree(host_x));
+    delete[] host_x;
     CUDA_CHECK(cudaFree(ws_idx_prev));
   };
-  
+
   /**
    * @brief Get all the kernel matrix rows for the working set.
    * @param ws_idx indices of the working set 
-   * @return pointer to the kernel tile [n_ws x n_rows] (but actually n_rows * n_ws layout should be better)
+   * @return pointer to the kernel tile [ n_rows x n_ws] K_j,i = K(x_j, x_q) where j=1..n_rows and q = ws_idx[i], j is the contiguous dimension
    * @note currently we just recalculate every value.
    * We have implemented linear kernels so far
    */
@@ -108,8 +108,8 @@ public:
     CUDA_CHECK(cudaPeekAtLastError());
 
     //calculate kernel function values for indices in ws_idx
-    LinAlg::gemm(x_ws, n_ws, n_cols, x, tile, n_ws, n_rows, CUBLAS_OP_N,
-          CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+    LinAlg::gemm(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
+          CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle);
     
     n_ws_prev = n_ws;
     copy(ws_idx_prev, ws_idx, n_ws);
