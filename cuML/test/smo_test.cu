@@ -100,7 +100,7 @@ TEST(SmoSolverTest, KernelCacheTest) {
     int *ws_idx_dev;
     allocate(ws_idx_dev, n_ws);
     
-    float x_host[] = {1, 2, 1, 2, 1, 2, 3, 4};
+    float x_host[] = { 1, 2, 3, 4, 5, 6, 7, 8};
     updateDevice(x_dev, x_host, n_rows*n_cols);
     
     int ws_idx_host[] = {0, 1, 2, 3};
@@ -108,10 +108,10 @@ TEST(SmoSolverTest, KernelCacheTest) {
     
     float tile_host[16];
     float tile_host_expected[] = {
-      2,  4,  4,  6,
-      4,  8,  8, 12,
-      4,  8, 10, 14,
-      6, 12, 14, 20
+      26, 32, 38, 44,
+      32, 40, 48, 56,
+      38, 48, 58, 68,
+      44, 56, 68, 80
     };
     
     cublasHandle_t cublas_handle;
@@ -119,22 +119,27 @@ TEST(SmoSolverTest, KernelCacheTest) {
     
     KernelCache<float> *cache = new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle);
     float *tile_dev = cache->GetTile(ws_idx_dev);
-    updateHost(tile_host, tile_dev, n_ws*n_ws);
+    updateHost(tile_host, tile_dev, n_ws*n_rows);
     
     for (int i=0; i<n_ws*n_ws; i++) {
-      EXPECT_EQ(tile_host[i], tile_host_expected[i]);
+      EXPECT_EQ(tile_host[i], tile_host_expected[i])<< "First tile " << i;
     }
     
+    // now check with selecting a subset of the rows
     delete cache;
     n_ws = 2;
     cache = new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle);
     ws_idx_host[1] = 3; // i.e. ws_idx_host[] = {0,3}
     updateDevice(ws_idx_dev, ws_idx_host, n_ws);
     tile_dev = cache->GetTile(ws_idx_dev);
-    updateHost(tile_host, tile_dev, n_ws*n_ws);
-    float tile_expected2[] = {2, 6, 6, 20};
-    for (int i=0; i<n_ws*n_ws; i++) {
-      EXPECT_EQ(tile_host[i], tile_expected2[i]) << i;
+    updateHost(tile_host, tile_dev, n_ws*n_rows);
+    
+    float tile_expected2[] = {
+      26, 32, 38, 44,
+      44, 56, 68, 80
+    };
+    for (int i=0; i<n_ws*n_rows; i++) {
+      EXPECT_EQ(tile_host[i], tile_expected2[i]) << "third tile " << i;
     }
     delete cache; 
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
