@@ -126,7 +126,7 @@ public:
   
   void UpdateF(math_t *f, const int n_rows, const math_t *delta_alpha, int n_ws, const math_t *cacheTile, cublasHandle_t cublas_handle) {
     // check sign here too.
-    LinAlg::gemv(cacheTile, n_ws, n_rows, delta_alpha, 1, f, 1, true, math_t(-1.0), math_t(1.0), cublas_handle);
+    LinAlg::gemv(cacheTile, n_rows, n_ws, delta_alpha, f, false, math_t(1.0), math_t(1.0), cublas_handle);
   }
 };
 

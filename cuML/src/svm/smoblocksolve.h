@@ -136,7 +136,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
     }
     // save results to global memory before exit
     alpha[idx] = a;
-    delta_alpha[tid] = a - a_save;
+    delta_alpha[tid] = (a - a_save) * y; // it is actuall y * \Delta \alpha
     // f is recalculated in f_update
     return_buff[1] = n_iter;
   }
