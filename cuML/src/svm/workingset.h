@@ -34,7 +34,7 @@ namespace SVM {
 
 using namespace MLCommon;
 
-__global__ void init_smo_buffers(int n_rows, int* f_idx) {
+__global__ void init_f_idx(int n_rows, int* f_idx) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   if (idx < n_rows) f_idx[idx] = idx;
 }
@@ -164,7 +164,7 @@ public:
  
   void Initialize() {
     int TPB = 256;
-    init_smo_buffers<<<ceildiv(n_rows, TPB), TPB>>>(n_rows, f_idx);
+    init_f_idx<<<ceildiv(n_rows, TPB), TPB>>>(n_rows, f_idx);
   }  
 };
 

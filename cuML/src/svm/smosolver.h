@@ -17,27 +17,49 @@
 #pragma once
 
 #include <cuda_utils.h>
+#include <limits>
+#include <iostream>
 
 #include "smo_sets.h"
 #include "workingset.h"
 #include "kernelcache.h"
 #include "smoblocksolve.h"
 #include "linalg/gemv.h"
+#include "linalg/unary_op.h"
+#include <cub/device/device_select.cuh>
+#include "print_vec.h"
 
 namespace ML {
 namespace SVM {
 
 using namespace MLCommon;
 
+template<typename math_t>
+
+/** This kernel is called once after SVM is fitted, to get collect results.
+  * 
+  */
+__global__ void CollectSupportVectors(math_t *x, int n_rows, int n_cols, math_t *y, math_t *alpha,
+    int *idx, int n_coefs, math_t *dual_coefs,  math_t *x_support) {
+  int tid =  blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid < n_coefs) {
+    int i = idx[tid]; 
+    dual_coefs[tid] = alpha[i] * y[i];
+    for (int j=0; j< n_cols; j++) {
+        x_support[tid + j * n_coefs] = x[i + j * n_rows];
+    }
+  }
+}
 
 /**
 * Implements SMO algorithm based on ThunderSVM and OHD-SVM. 
 */
 template<typename math_t>
 class SmoSolver {
-private:
+public:
   int n_rows = 0;
   int n_ws = 0;
+  int n_cols;
   // Buffers for the domain [n_rows]
   math_t *alpha = nullptr;       //< dual coordinates
   math_t *f = nullptr;           //< optimality indicator vector
@@ -51,6 +73,7 @@ private:
   
   math_t C;
   math_t tol;
+
 public:
   SmoSolver(math_t C = 1, math_t tol = 0.001) 
     : n_rows(n_rows), C(C), tol(tol)
@@ -63,9 +86,11 @@ public:
   
 
   // this needs to know n_ws, therefore it can be only called during the solve step
-  void AllocateBuffers() {
+  void AllocateBuffers(int n_rows, int n_cols, int n_ws) {
     FreeBuffers();
-    this->n_rows=n_rows;
+    this->n_rows = n_rows;
+    this->n_cols = n_cols;
+    this->n_ws = n_ws;
     allocate(alpha, n_rows); 
     allocate(f, n_rows);  
     allocate(delta_alpha, n_ws);
@@ -95,18 +120,25 @@ public:
   }
 
   
-  void Solve(math_t* x, int n_rows, int n_cols, math_t* y, math_t **nz_alpha, int **idx,
-      cublasHandle_t cublas_handle) {
-    int n_iter = 0;
+  void Solve(math_t *x, int n_rows, int n_cols, math_t *y, math_t **dual_coefs, int *n_coefs, 
+             math_t **x_support, int **idx, math_t *b, cublasHandle_t cublas_handle, int max_iter = -1) {
+    if (max_iter == -1) {
+        max_iter = n_rows < std::numeric_limits<int>::max() / 100 ?  n_rows * 100 :
+             std::numeric_limits<int>::max();
+        max_iter = max(100000, max_iter);
+    }
     
     WorkingSet<math_t> ws(n_rows);
     int n_ws = ws.GetSize();
-    AllocateBuffers();    
+    AllocateBuffers(n_rows, n_cols, n_ws);    
     Initialize(y);
     
     KernelCache<math_t> cache(x, n_rows, n_cols, n_ws, cublas_handle);
     
-    while (n_iter < 1) { // TODO: add proper stopping condition
+    int n_iter = 0;
+    math_t diff = 10*tol;
+    
+    while (n_iter < max_iter && diff >= tol) { 
       CUDA_CHECK(cudaMemset(delta_alpha, 0, n_ws * sizeof(math_t)));
       ws.Select(f, alpha, y, C);
       math_t * cacheTile = cache.GetTile(ws.idx); 
@@ -117,12 +149,62 @@ public:
         
       UpdateF(f, n_rows, delta_alpha, n_ws, cacheTile, cublas_handle);
       // check stopping condition
-      math_t diff = host_return_buff[0];
+      diff = host_return_buff[0];
       n_iter++;
     }    
     
+    GetResults(x, n_rows, n_cols, y, alpha, dual_coefs, n_coefs, idx, x_support, b);    
     FreeBuffers(); 
   }
+  
+  void GetResults(math_t *x, int n_rows, int n_cols, math_t *y, math_t *alpha, math_t **dual_coefs, int *n_coefs, int **idx, math_t **x_support, math_t *b) {
+   
+    int *f_idx, *f_idx_selected;
+    int *d_num_selected;
+    allocate(f_idx, n_rows);
+    allocate(f_idx_selected, n_rows);
+    allocate(d_num_selected, 1);
+    void     *d_temp_storage = NULL;
+    size_t   temp_storage_bytes = 0;
+    
+    int TPB=256;
+    init_f_idx<<<ceildiv(n_rows, TPB), TPB>>>(n_rows, f_idx);
+    CUDA_CHECK(cudaPeekAtLastError());
+    std::cout<<"f_idx initialized\n";
+    
+    cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, f_idx, f_idx_selected, d_num_selected, 
+                          n_rows, [alpha]__device__ (int i) {return alpha[i] > 0;});
+    // Allocate temporary storage
+    cudaMalloc(&d_temp_storage, temp_storage_bytes);
+    // Run selection
+    cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, f_idx, f_idx_selected, d_num_selected, 
+                          n_rows, [alpha]__device__ (int i) {return  alpha[i] > 0;});
+    std::cout<<"Indices selected\n";
+    
+    updateHost(n_coefs, d_num_selected, 1);
+    if (*n_coefs > 0) {
+      allocate(*idx, *n_coefs);
+      copy(*idx, f_idx_selected, *n_coefs);
+    
+      allocate(*dual_coefs, *n_coefs);
+      allocate(*x_support, (*n_coefs) * n_cols);
+      std::cout<<"Return buffers allocated for n_coefs="<<*n_coefs<<"\n";
+    
+      CollectSupportVectors<<<ceildiv(*n_coefs,TPB),TPB>>>(x, n_rows, n_cols, y, alpha, *idx,
+          *n_coefs, *dual_coefs, *x_support);
+      std::cout<<"Return values copied\n";
+    
+      CUDA_CHECK(cudaPeekAtLastError());
+    }
+    
+    CUDA_CHECK(cudaFree(f_idx));
+    CUDA_CHECK(cudaFree(f_idx_selected));
+    CUDA_CHECK(cudaFree(d_num_selected));
+    CUDA_CHECK(cudaFree(d_temp_storage)); 
+    
+    // calculate b
+  }
+  
   
   void UpdateF(math_t *f, const int n_rows, const math_t *delta_alpha, int n_ws, const math_t *cacheTile, cublasHandle_t cublas_handle) {
     // check sign here too.
