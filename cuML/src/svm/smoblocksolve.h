@@ -60,15 +60,14 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
     __shared__ math_t diff_end;
     __shared__ math_t diff;
     
-    printf("%d %d :%f %f %f\n", tid, idx, f, a, y);
-    Kd[tid] = kernel[tid*n_rows + tid]; //kernel[idx*n_ws + idx];
+    printf("tid idx f a y %d %d :%f %f %f\n", tid, idx, f, a, y);
+    Kd[tid] = kernel[tid*n_rows + idx];
     int n_iter = 0;
     for (; n_iter < max_iter; n_iter++) {
       // mask values outside of X_upper  
       math_t f_tmp = in_upper(a, y, C) ? f : INFINITY; 
       Pair pair{f_tmp, tid};
       Pair res = BlockReduce(temp_storage.pair).Reduce(pair, cub::Min(), n_ws);
-      //auto resu = BlockReduceFloat(temp_storage.single).Reduce(f_tmp, cub::Min(), n_ws);
       if (tid==0) {
         f_u = res.val;
         u = res.key;
@@ -76,7 +75,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       // select f_max to check stopping condition
       f_tmp = in_lower(a, y, C) ? f : -INFINITY;
       __syncthreads();   // needed because I am reusing the shared memory buffer   
-      math_t Kui = kernel[u * n_rows + tid];
+      math_t Kui = kernel[u * n_rows + idx];
       math_t f_max = BlockReduceFloat(temp_storage.single).Reduce(f_tmp, cub::Max(), n_ws);
       
       if (tid==0) {
@@ -105,8 +104,8 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
           l = res.key;
       }
       __syncthreads();
-      printf("reducmax %d %d ::%f %f\n", tid, l, f, f_tmp);
-      math_t Kli = kernel[l * n_rows + tid];
+      //printf("reducmax %d %d ::%f %f\n", tid, l, f, f_tmp);
+      math_t Kli = kernel[l * n_rows + idx];
       
       // check once more the final sign
        //update alpha
@@ -131,7 +130,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       if (threadIdx.x == u) a += q * y;
       if (threadIdx.x == l) a -= q * y;
       f += q * (Kui - Kli);
-      printf("(tid u l fu f a q) %d %d %d ::%f %f %f %f\n", tid, u, l, f_u, f, a, q);
+      printf("(tid idx u l fu f a q) %d %d %d %d ::%f %f %f %f\n", tid, idx, u, l, f_u, f, a, q);
 
     }
     // save results to global memory before exit
