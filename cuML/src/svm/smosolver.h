@@ -121,11 +121,12 @@ public:
 
   
   void Solve(math_t *x, int n_rows, int n_cols, math_t *y, math_t **dual_coefs, int *n_coefs, 
-             math_t **x_support, int **idx, math_t *b, cublasHandle_t cublas_handle, int max_iter = -1) {
-    if (max_iter == -1) {
-        max_iter = n_rows < std::numeric_limits<int>::max() / 100 ?  n_rows * 100 :
+             math_t **x_support, int **idx, math_t *b, cublasHandle_t cublas_handle,
+             int max_outer_iter = -1, int max_inner_iter = 10000) {
+    if (max_outer_iter == -1) {
+        max_outer_iter = n_rows < std::numeric_limits<int>::max() / 100 ?  n_rows * 100 :
              std::numeric_limits<int>::max();
-        max_iter = max(100000, max_iter);
+        max_outer_iter = max(100000, max_outer_iter);
     }
     
     WorkingSet<math_t> ws(n_rows);
@@ -138,22 +139,28 @@ public:
     int n_iter = 0;
     math_t diff = 10*tol;
     
-    while (n_iter < max_iter && diff >= tol) { 
+    while (n_iter < max_outer_iter && diff >= tol) { 
       CUDA_CHECK(cudaMemset(delta_alpha, 0, n_ws * sizeof(math_t)));
       ws.Select(f, alpha, y, C);
-      math_t * cacheTile = cache.GetTile(ws.idx); 
+      print_vec(ws.idx, n_rows, "ws ");
       
+      math_t * cacheTile = cache.GetTile(ws.idx); 
+      print_vec(cacheTile, n_rows * n_ws, "cachetile ");
+      print_vec(alpha, n_rows, "alpha in ");
+
       SmoBlockSolve<math_t, 1024><<<1, n_ws>>>(y, n_rows, alpha, n_ws, delta_alpha, f, cacheTile,
-                                  ws.idx, C, tol, return_buff);
+                                  ws.idx, C, tol, return_buff, max_inner_iter);
       updateHost(host_return_buff, return_buff, 2);
         
       UpdateF(f, n_rows, delta_alpha, n_ws, cacheTile, cublas_handle);
       // check stopping condition
       diff = host_return_buff[0];
+      print_vec(f, n_rows, "f ");
       n_iter++;
     }    
-    
+    print_vec(alpha, n_rows, "alpha out ");
     GetResults(x, n_rows, n_cols, y, alpha, dual_coefs, n_coefs, idx, x_support, b);    
+    print_vec(*dual_coefs, *n_coefs, "dual coefs out ");
     FreeBuffers(); 
   }
   
@@ -185,7 +192,7 @@ public:
     if (*n_coefs > 0) {
       allocate(*idx, *n_coefs);
       copy(*idx, f_idx_selected, *n_coefs);
-    
+      print_vec(*idx, *n_coefs, "Indices with nonzero dual coefs ");
       allocate(*dual_coefs, *n_coefs);
       allocate(*x_support, (*n_coefs) * n_cols);
       std::cout<<"Return buffers allocated for n_coefs="<<*n_coefs<<"\n";
