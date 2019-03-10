@@ -39,8 +39,8 @@ using namespace MLCommon;
  * @param ws_idx an array of all the working set indices (row indices of x)
  */
 template <typename math_t>
-__global__ void collect_rows(math_t *x, int n_rows, int n_cols, 
-                              math_t *x_ws, int n_ws, int *ws_idx)
+__global__ void collect_rows(const math_t *x, int n_rows, int n_cols, 
+                              math_t *x_ws, int n_ws, const int *ws_idx)
 {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   int ws_row = tid % n_ws; // row idx
@@ -66,7 +66,7 @@ __global__ void collect_rows(math_t *x, int n_rows, int n_cols,
 */ 
 template<typename math_t>
 class KernelCache {
-  math_t *x, *host_x; 
+  const math_t *x;
   math_t *x_ws; // feature vectors in the current working set
   int *ws_idx_prev; 
   int n_ws_prev = 0;
@@ -78,11 +78,10 @@ class KernelCache {
   cublasHandle_t cublas_handle;
   
 public:
-  KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle) 
+  KernelCache(const math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle) 
     : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
   {
     allocate(x_ws, n_ws*n_cols);
-    host_x = new math_t[n_rows*n_rows];
     allocate(tile, n_rows*n_ws);
     allocate(ws_idx_prev, n_ws);
   };
@@ -90,7 +89,6 @@ public:
   ~KernelCache() {
     CUDA_CHECK(cudaFree(tile));
     CUDA_CHECK(cudaFree(x_ws));
-    delete[] host_x;
     CUDA_CHECK(cudaFree(ws_idx_prev));
   };
 

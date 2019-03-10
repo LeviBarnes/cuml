@@ -16,7 +16,6 @@
 
 #pragma once
 
-//#include <utility>
 #include "ml_utils.h"
 #include <cuda_utils.h>
 #include "selection/kselection.h"
@@ -60,7 +59,6 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
     __shared__ math_t diff_end;
     __shared__ math_t diff;
     
-    printf("tid idx f a y %d %d :%f %f %f\n", tid, idx, f, a, y);
     Kd[tid] = kernel[tid*n_rows + idx];
     int n_iter = 0;
     for (; n_iter < max_iter; n_iter++) {
@@ -83,12 +81,10 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
         diff = f_max-f_u;
         if (n_iter==0) {
           return_buff[0] = diff;
-          // are the fmin/max functions overloaded for float/double?
           diff_end = max(eps, 0.1f*diff);
         }
       }
       __syncthreads();
- //     printf("%d %d ::%f %f %f\n", tid, u, f_u, f_max, diff);
       if (diff < diff_end ) {
         break;
       }
@@ -107,7 +103,6 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       //printf("reducmax %d %d ::%f %f\n", tid, l, f, f_tmp);
       math_t Kli = kernel[l * n_rows + idx];
       
-      // check once more the final sign
        //update alpha
       //
       // we know that 0 <= a <= C
@@ -122,7 +117,6 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       if (threadIdx.x == l) {
             tmp_l = y > 0 ? a : C - a;
             tmp_l = min(tmp_l, (f - f_u) / (Kd[u] + Kd[l] - 2 * Kui)); // note: Kui == Kul for this thread
-            printf("( tmp_l tmp_u ku kl kul) :%f %f %f %f %f\n", tmp_l, tmp_u, Kd[u], Kd[l], Kui);
       }
       __syncthreads();
       math_t q = min(tmp_u, tmp_l);
@@ -130,8 +124,6 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       if (threadIdx.x == u) a += q * y;
       if (threadIdx.x == l) a -= q * y;
       f += q * (Kui - Kli);
-      printf("(tid idx u l fu f a q) %d %d %d %d ::%f %f %f %f\n", tid, idx, u, l, f_u, f, a, q);
-
     }
     // save results to global memory before exit
     alpha[idx] = a;

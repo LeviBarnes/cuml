@@ -47,6 +47,7 @@ using namespace MLCommon;
 
     
 template<typename math_t>
+
 void svcFit(math_t *input,
 		    int n_rows,
 		    int n_cols,
@@ -68,10 +69,10 @@ void svcFit(math_t *input,
     
     SmoSolver<math_t> smo(C, tol);
     
-    int *idx;
-    int n_coefs;
-    math_t *x_support;
-    math_t b;
+    int *idx = nullptr;
+    int n_coefs = 0;
+    math_t *x_support = nullptr;
+    math_t *b = nullptr;
     
     smo.Solve(input, n_rows, n_cols, labels, &coef, &n_coefs, &x_support, &idx, &b, cublas_handle);
  
