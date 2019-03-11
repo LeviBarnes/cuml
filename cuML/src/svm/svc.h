@@ -62,8 +62,6 @@ void svcFit(math_t *input,
 	ASSERT(n_rows > 1,
 			"Parameter n_rows: number of rows cannot be less than two");
 
-    std::cout<<"Hello SVM traning World!\n";
-
      // calculate the size of the working set
     int n_ws = min(1024, n_rows); // TODO: also check if we fit in memory (we will need n_ws*n_rows space for kernel cache)
     
@@ -72,10 +70,10 @@ void svcFit(math_t *input,
     int *idx = nullptr;
     int n_coefs = 0;
     math_t *x_support = nullptr;
-    math_t *b = nullptr;
+    math_t b;
     
     smo.Solve(input, n_rows, n_cols, labels, &coef, &n_coefs, &x_support, &idx, &b, cublas_handle);
- 
+    std::cout<<"SVC.fit finished, number of support vectors "<<n_coefs<<", b = " <<b<<"\n";
     // get output support vectors and return them, return nonzero alpha coefficients.
     
     
