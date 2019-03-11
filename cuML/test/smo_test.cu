@@ -352,7 +352,7 @@ TEST(SmoSolverTest, GetResultsTest) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
 
@@ -462,7 +462,7 @@ TEST(SmoSolverTest, SmoSolveTest) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
   
@@ -507,9 +507,7 @@ TEST(SmoSolverTest, SmoSolveTest) {
   EXPECT_FLOAT_EQ(w[0], -0.4);
   EXPECT_FLOAT_EQ(w[1],  1.2);
   
-  float b_host;
-  updateHost(&b_host, b, 1);
-  EXPECT_FLOAT_EQ(b_host, -1.8);
+  EXPECT_FLOAT_EQ(b, -1.8);
   
   CUBLAS_CHECK(cublasDestroy(cublas_handle));
   if (n_coefs > 0) {
@@ -544,7 +542,7 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
   std::cout<<"Running LargeC test\n";
@@ -591,9 +589,7 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
   EXPECT_LT(abs(w[0] - (-2)), epsilon);
   EXPECT_LT(abs(w[1] - 2), epsilon);
  
-  float b_host;
-  updateHost(&b_host, b, 1);
-  EXPECT_FLOAT_EQ(b_host, -1.0f);
+  EXPECT_FLOAT_EQ(b, -1.0f);
   
   CUBLAS_CHECK(cublasDestroy(cublas_handle));
   if (n_coefs > 0) {
