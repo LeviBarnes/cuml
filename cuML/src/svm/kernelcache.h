@@ -116,6 +116,9 @@ class KernelCache {
   math_t *tile = nullptr;
   cublasHandle_t cublas_handle;
   
+  void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
+                    int, int, cublasOperation_t, cublasOperation_t, 
+                    math_t, math_t, cublasHandle_t) = nullptr;
 public:
   KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle) 
     : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
@@ -126,6 +129,14 @@ public:
     allocate(ws_idx_prev, n_ws);
   };
   
+  KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle, 
+       void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
+                         int, int, cublasOperation_t, cublasOperation_t, 
+                         math_t, math_t, cublasHandle_t)  ) : kernelOp(kernelOp)
+  {
+    KernelCache(x, n_rows, n_cols, n_ws, cublas_handle);
+  }
+
   ~KernelCache() {
     CUDA_CHECK(cudaFree(tile));
     CUDA_CHECK(cudaFree(x_ws));
@@ -152,8 +163,10 @@ public:
     //calc_ws_remap<<<n_ws,n_ws>>>(w_idx_set, n_ws, ws_idx_set_prev, idx_remap);
     //fill_x_ws<<<ceildiv(n_rows*n_cols,TPB), TPB>>>(x, n_rows, n_cols, x_ws, n_ws, ws_idx, ws_idx_prev, n_ws_prev);
     //calculate kernel function values for indices in ws_idx
-    LinAlg::gemm(x_ws, n_ws, n_cols, x, tile, n_ws, n_rows, CUBLAS_OP_N,
+    if (!kernelOp) {
+       LinAlg::gemm(x_ws, n_ws, n_cols, x, tile, n_ws, n_rows, CUBLAS_OP_N,
           CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+    }
     
     n_ws_prev = n_ws;
     copy(ws_idx_prev, ws_idx, n_ws);
