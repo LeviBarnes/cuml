@@ -52,30 +52,26 @@ void svcFit(math_t *input,
 		    int n_rows,
 		    int n_cols,
 		    math_t *labels, // = y
-		    math_t *coef,
+		    math_t **coef,
+            int *n_coefs,
+            int **support_idx,
+            math_t **x_support,
+            math_t *b,
 		    math_t C,
 		    math_t tol,
 		    cublasHandle_t cublas_handle) {
 
-	ASSERT(n_cols > 1,
-			"Parameter n_cols: number of columns cannot be less than two");
-	ASSERT(n_rows > 1,
-			"Parameter n_rows: number of rows cannot be less than two");
+	ASSERT(n_cols > 0,
+			"Parameter n_cols: number of columns cannot be less than one");
+	ASSERT(n_rows > 0,
+			"Parameter n_rows: number of rows cannot be less than one");
 
      // calculate the size of the working set
     int n_ws = min(1024, n_rows); // TODO: also check if we fit in memory (we will need n_ws*n_rows space for kernel cache)
     
     SmoSolver<math_t> smo(C, tol);
     
-    int *idx = nullptr;
-    int n_coefs = 0;
-    math_t *x_support = nullptr;
-    math_t b;
-    
-    smo.Solve(input, n_rows, n_cols, labels, &coef, &n_coefs, &x_support, &idx, &b, cublas_handle);
-    std::cout<<"SVC.fit finished, number of support vectors "<<n_coefs<<", b = " <<b<<"\n";
-    // get output support vectors and return them, return nonzero alpha coefficients.
-    
+    smo.Solve(input, n_rows, n_cols, labels, coef, n_coefs, x_support, support_idx, b, cublas_handle);   
     
 }
 
