@@ -37,21 +37,18 @@
 #include <linalg/map_then_reduce.h>
 
 #include <iostream>
+#include "classlabels.h"
 
 namespace ML {
 namespace SVM {
 
 using namespace MLCommon;
-
-
-
-    
-template<typename math_t>
-
+                
+template<typename math_t, typename label_t>
 void svcFit(math_t *input,
 		    int n_rows,
 		    int n_cols,
-		    math_t *labels, // = y
+		    label_t *labels, // = y
 		    math_t **coef,
             int *n_coefs,
             int **support_idx,
@@ -69,11 +66,22 @@ void svcFit(math_t *input,
      // calculate the size of the working set
     int n_ws = min(1024, n_rows); // TODO: also check if we fit in memory (we will need n_ws*n_rows space for kernel cache)
     
+    label_t *unique_labels = nullptr;
+    int n_classes;
+    get_unique_classes(labels, n_rows,  &unique_labels, &n_classes);
+    ASSERT(n_classes == 2,
+           "We have only binary classification implemented at the moment");
+    
+    math_t *y;
+    allocate(y, n_rows);
+    get_ovr_labels(labels, n_rows, unique_labels, n_classes, y, 1);
     SmoSolver<math_t> smo(C, tol);
     
-    smo.Solve(input, n_rows, n_cols, labels, coef, n_coefs, x_support, support_idx, b, cublas_handle);   
-    
+    smo.Solve(input, n_rows, n_cols, y, coef, n_coefs, x_support, support_idx, b, cublas_handle);   
+    CUDA_CHECK(cudaFree(y));  
+    CUDA_CHECK(cudaFree(unique_labels));  
 }
+
 
 
 /*

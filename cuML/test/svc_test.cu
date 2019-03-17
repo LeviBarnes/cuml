@@ -16,6 +16,7 @@
 
 //#include "svm/svc.h"
 #include "svm/svm_c.h"
+#include "svm/classlabels.h"
 #include <gtest/gtest.h>
 #include <cuda_utils.h>
 #include <test_utils.h>
@@ -96,6 +97,45 @@ TEST(SvcSolverTest, SvcTest) {
   }
   CUDA_CHECK(cudaFree(x_dev));
   CUDA_CHECK(cudaFree(y_dev));
+}
+
+TEST(SvcSolverTest, RelabelTest) {
+  int n_rows = 6;
+  float *y_d;
+  allocate(y_d, n_rows);
+
+  float y_h[] = {2, -1, 1, 2, 1, 1};
+  updateDevice(y_d, y_h, n_rows);
+
+  int n_classes;
+  float *y_unique_d;
+  get_unique_classes(y_d, n_rows, &y_unique_d, &n_classes);
+ 
+  ASSERT_EQ(n_classes, 3);
+  
+  float y_unique_h[4]; 
+  updateHost(y_unique_h, y_unique_d, 3);  
+  
+  float y_unique_exp[] = { -1, 1, 2 };
+  
+  for (int i=0; i<n_classes; i++) {
+    EXPECT_EQ(y_unique_h[i], y_unique_exp[i]) << i;
+  }
+  
+  float *y_relabeled_d;
+  allocate(y_relabeled_d, n_rows);
+  
+  get_ovr_labels(y_d, n_rows, y_unique_d, n_classes, y_relabeled_d, 2);
+  float y_relabeled_h[6];
+  updateHost(y_relabeled_h, y_relabeled_d, 6);
+  float y_relabeled_exp[] = {1, -1, -1, 1, -1, -1};
+  for (int i=0; i<n_rows; i++) {
+    EXPECT_EQ(y_relabeled_h[i], y_relabeled_exp[i]) <<i;
+  }
+  
+  CUDA_CHECK(cudaFree(y_d));  
+  CUDA_CHECK(cudaFree(y_unique_d));  
+  CUDA_CHECK(cudaFree(y_relabeled_d));  
 }
 
 }; // end namespace SVM
