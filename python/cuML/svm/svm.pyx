@@ -28,7 +28,15 @@ class SVC:
 
         self.tol = tol
         self.C = C
+        self.dual_coefs_ = None
+        self.intercept_ = None
+        
 
+    def __dealloc__(self):
+        if (self.dual_coefs_):
+            # free up memory 
+            pass
+                   
     def _get_kernel_int(self, loss):
         return {
             'rbf': 0,
@@ -77,7 +85,7 @@ class SVC:
             raise TypeError(msg)
 
         X_ptr = self._get_ctype_ptr(X_m)
-
+        
         cdef uintptr_t y_ptr
         if (isinstance(y, cudf.Series)):
             y_ptr = self._get_column_ptr(y)
@@ -87,30 +95,44 @@ class SVC:
         else:
             msg = "y vector must be a cuDF series or Numpy ndarray"
             raise TypeError(msg)
-
         self.n_alpha = 1
 
-        self.coef_ = cudf.Series(np.zeros(self.n_cols, dtype=self.gdf_datatype))
-        cdef uintptr_t coef_ptr = self._get_column_ptr(self.coef_)
-
-        
+        #self.coef_ = cudf.Series(np.zeros(self.n_cols, dtype=self.gdf_datatype))
+        cdef uintptr_t coef_ptr # = self._get_column_ptr(self.coef_)
+        cdef uintptr_t support_idx_ptr
+        cdef uintptr_t x_support_ptr
+        cdef int n_coefs
+        cdef float fb
+        cdef double db
         if self.gdf_datatype.type == np.float32:
             svm.svcFit(<float*>X_ptr, 
                        <int>self.n_rows, 
                        <int>self.n_cols, 
                        <float*>y_ptr, 
-                       <float*>coef_ptr,
+                       <float**>&coef_ptr,
+                       &n_coefs,
+                       <int**> &support_idx_ptr, 
+                       <float**> &x_support_ptr,
+                       &fb,
                        <float>self.C, 
                        <float>self.tol)
+            self.intercept_ = fb
         else:
+
             svm.svcFit(<double*>X_ptr, 
                        <int>self.n_rows, 
                        <int>self.n_cols, 
                        <double*>y_ptr, 
-                       <double*>coef_ptr,
+                       <double**>&coef_ptr,
+                       &n_coefs,
+                       <int**> &support_idx_ptr, 
+                       <double**> x_support_ptr, 
+                       &db,
                        <double>self.C,
                        <double>self.tol)
+            self.intercept_ = db
             
+        self.n_coefs = n_coefs
         return self
 
     def predict(self, X):

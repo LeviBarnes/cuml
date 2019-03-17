@@ -21,7 +21,11 @@ cdef extern from "svm/svm_c.h" namespace "ML::SVM":
 	                 int n_rows,
 	                 int n_cols,
 	                 float *labels,
-	                 float *coef,
+	                 float **coef,
+	                 int *n_coefs,
+	                 int **support_idx,
+	                 float **x_support,
+	                 float *b,
 	                 float C,
 	                 float tol)
 
@@ -30,7 +34,11 @@ cdef extern from "svm/svm_c.h" namespace "ML::SVM":
 	                 int n_rows,
 	                 int n_cols,
 	                 double *labels,
-	                 double *coef,
+	                 double **coef,
+	                 int *n_coefs,
+	                 int **support_idx,
+	                 double **x_support,
+	                 double *b,
 	                 double C,
 	                 double tol)
 	                 
