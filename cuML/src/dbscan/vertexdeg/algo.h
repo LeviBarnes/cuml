@@ -30,6 +30,7 @@ namespace Algo {
 
 template <typename value_t>
 void launcher(Pack<value_t> data, cudaStream_t stream, int startVertexId, int batchSize) {
+
     data.resetArray(stream, batchSize+1);
 
     typedef cutlass::Shape<8, 128, 128> OutputTile_t;
@@ -40,9 +41,12 @@ void launcher(Pack<value_t> data, cudaStream_t stream, int startVertexId, int ba
 
     char* workspace = nullptr;
     size_t workspaceSize = 0;
+
     value_t eps2 = data.eps * data.eps;
+
     int* vd = data.vd;
     bool* adj = data.adj;
+
     ///@todo: once we support bool outputs in distance method, this should be removed!
     value_t* dist = data.dots;
 
@@ -61,32 +65,30 @@ void launcher(Pack<value_t> data, cudaStream_t stream, int startVertexId, int ba
         return val;
     };
 
-    MLCommon::Distance::distance<value_t, value_t, value_t, OutputTile_t>
-    		(data.x, data.x+startVertexId*k, 					// x & y inputs
-                 dist,  // output todo: this should be removed soon
-    		 m, n, k, 											// Cutlass block params
-    		 MLCommon::Distance::DistanceType::EucExpandedL2, 	// distance metric type
-    		 (void*)workspace, workspaceSize, 							// workspace params
-    		 dbscan_op, 										// epilogue operator
-    		 stream												// cuda stream
-	 );
+    constexpr auto distance_type = MLCommon::Distance::DistanceType::EucUnexpandedL2;
 
+    workspaceSize =  MLCommon::Distance::getWorkspaceSize<distance_type, value_t, value_t, value_t>
+    		(data.x, data.x+startVertexId*k, 					// x & y inputs
+    		 m, n, k 											// Cutlass block params
+    );
+
+    CUDA_CHECK(cudaPeekAtLastError());
 
     if (workspaceSize != 0) {
         MLCommon::allocate(workspace, workspaceSize);
     }
 
-    MLCommon::Distance::distance<value_t, value_t, value_t, OutputTile_t>
+    MLCommon::Distance::distance<distance_type, value_t, value_t, value_t, OutputTile_t>
     		(data.x, data.x+startVertexId*k, 					// x & y inputs
                  dist,  // output todo: this should be removed soon
     		 m, n, k, 											// Cutlass block params
-    		 MLCommon::Distance::DistanceType::EucExpandedL2, 	// distance metric type
     		 (void*)workspace, workspaceSize, 					// workspace params
     		 dbscan_op, 										// epilogue operator
     		 stream												// cuda stream
 	 );
 
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaPeekAtLastError());
+    CUDA_CHECK(cudaFree(workspace));
 }
 
 
