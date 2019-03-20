@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#pragma once
-
 namespace ML {
 namespace SVM {
 
@@ -24,11 +22,7 @@ void svcFit(float *input,
 	        int n_rows,
 	        int n_cols,
 	        float *labels,
-	        float **coef,
-            int *n_coefs,
-            int **support_idx,
-            float **x_support,
-            float *b,
+	        float *coef,
 	        float C,
 	        float tol);
 
@@ -36,11 +30,7 @@ void svcFit(double *input,
 	        int n_rows,
 	        int n_cols,
 	        double *labels,
-	        double **coef,
-            int *n_coefs,
-            int **support_idx,
-            double **x_support,
-            double *b,
+	        double *coef,
 	        double C,
 	        double tol);
 /*

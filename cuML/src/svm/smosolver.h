@@ -163,7 +163,7 @@ public:
 
   
   void Solve(math_t *x, int n_rows, int n_cols, math_t *y, math_t **dual_coefs, int *n_coefs, 
-             math_t **x_support, int **idx, math_t *b, cublasHandle_t cublas_handle,
+             math_t **x_support, int **idx, math_t **b, cublasHandle_t cublas_handle,
              int max_outer_iter = -1, int max_inner_iter = 10000) {
     if (max_outer_iter == -1) {
         max_outer_iter = n_rows < std::numeric_limits<int>::max() / 100 ?  n_rows * 100 :
@@ -195,8 +195,6 @@ public:
       diff = host_return_buff[0];
       n_iter++;
     }    
-    
-    std::cout<<"SMO solver finished after "<<n_iter<<" iterations with diff "<<diff<<"\n";
     GetResults(x, n_rows, n_cols, y, alpha, dual_coefs, n_coefs, idx, x_support, b, cublas_handle);  
     
     FreeBuffers(); 
@@ -204,7 +202,7 @@ public:
   
   void GetResults(const math_t *x,  int n_rows, int n_cols, const math_t *y, 
                   const math_t *alpha,
-                  math_t **dual_coefs, int *n_coefs, int **idx, math_t **x_support, math_t *b,
+                  math_t **dual_coefs, int *n_coefs, int **idx, math_t **x_support, math_t **b,
                   cublasHandle_t cublas_handle
                  ) {
    
@@ -242,15 +240,12 @@ public:
     }
 
     // calculate b
-    math_t *b_dev;
-    allocate(b_dev,1);
+    allocate(*b,1);
     KernelCache<math_t> cache(x, n_rows, n_cols, *n_coefs, cublas_handle);
     math_t *cacheTile = cache.GetTile(*idx);
-    CalcB<<<1,1024>>>(cacheTile,  n_rows, *n_coefs, y, alpha, *dual_coefs, *idx, C, b_dev);
-    updateHost(b, b_dev, 1);
+    CalcB<<<1,1024>>>(cacheTile,  n_rows, *n_coefs, y, alpha, *dual_coefs, *idx, C, *b);
     
     CUDA_CHECK(cudaPeekAtLastError());
-    CUDA_CHECK(cudaFree(b_dev));
     CUDA_CHECK(cudaFree(f_idx));
     CUDA_CHECK(cudaFree(f_idx_selected));
     CUDA_CHECK(cudaFree(d_num_selected));
