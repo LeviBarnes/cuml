@@ -158,6 +158,51 @@ TEST(SmoSolverTest, KernelCacheTest) {
     CUDA_CHECK(cudaFree(ws_idx_dev));
 }
 
+__global__ void init_training_vectors(float * x, int n_rows, int n_cols, int *ws_idx, int n_ws) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if (tid < n_rows * n_cols) {
+      int i = tid % n_rows;
+      int k = tid / n_rows;
+      x [tid] = tid;
+      if (k==0) {
+          ws_idx[i] = i;
+      }
+    }
+    
+}
+TEST(SmoSolverTest, KernelCacheLargeTest) {
+    int n_rows = 10;
+    int n_cols = 700;
+    int n_ws = n_rows;
+    
+    float *x_dev;
+    allocate(x_dev, n_rows*n_cols);
+    int *ws_idx_dev;
+    allocate(ws_idx_dev, n_ws);
+    
+    int TPB=256;
+    init_training_vectors<<<ceildiv(n_rows*n_cols, TPB), TPB>>>(x_dev, n_rows, n_cols, ws_idx_dev, n_ws);
+    CUDA_CHECK(cudaPeekAtLastError());
+    
+    cublasHandle_t cublas_handle;
+    CUBLAS_CHECK(cublasCreate(&cublas_handle));
+    
+    KernelCache<float> *cache = new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle);
+    float *tile_dev = cache->GetTile(ws_idx_dev);
+    float *tile_host = new float[n_rows*n_cols];
+    updateHost(tile_host, tile_dev, n_ws*n_rows);
+    
+    /*for (int i=0; i<n_ws*n_ws; i++) {
+      EXPECT_EQ(tile_host[i], tile_host_expected[i])<< "First tile " << i;
+    }*/
+    
+    delete cache; 
+    delete[] tile_host;
+    CUBLAS_CHECK(cublasDestroy(cublas_handle));
+    CUDA_CHECK(cudaFree(x_dev));
+    CUDA_CHECK(cudaFree(ws_idx_dev));
+}
+
 // test a single iteration of the block solver
 TEST(SmoSolverTest, SmoBlockSolveSingleTest) {
   int n_rows = 4;
@@ -363,7 +408,7 @@ TEST(SmoSolverTest, GetResultsTest) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
 
@@ -473,7 +518,7 @@ TEST(SmoSolverTest, SmoSolveTest) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
   
@@ -518,9 +563,7 @@ TEST(SmoSolverTest, SmoSolveTest) {
   EXPECT_FLOAT_EQ(w[0], -0.4);
   EXPECT_FLOAT_EQ(w[1],  1.2);
   
-  float b_host;
-  updateHost(&b_host, b, 1);
-  EXPECT_FLOAT_EQ(b_host, -1.8);
+  EXPECT_FLOAT_EQ(b, -1.8);
   
   CUBLAS_CHECK(cublasDestroy(cublas_handle));
   if (n_coefs > 0) {
@@ -555,7 +598,7 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
   int n_coefs;
   int *idx;
   float *x_support;
-  float *b;
+  float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
   std::cout<<"Running LargeC test\n";
@@ -602,9 +645,7 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
   EXPECT_LT(abs(w[0] - (-2)), epsilon);
   EXPECT_LT(abs(w[1] - 2), epsilon);
  
-  float b_host;
-  updateHost(&b_host, b, 1);
-  EXPECT_FLOAT_EQ(b_host, -1.0f);
+  EXPECT_FLOAT_EQ(b, -1.0f);
   
   CUBLAS_CHECK(cublasDestroy(cublas_handle));
   if (n_coefs > 0) {
