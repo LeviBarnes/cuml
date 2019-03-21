@@ -19,11 +19,9 @@
 #include "ml_utils.h"
 #include <cuda_utils.h>
 #include <cub/cub.cuh>
-//#include <cub/device/device_radix_sort.cuh>
 #include <limits.h>
-#include <linalg/unary_op.h>
-#include <linalg/ternary_op.h>
-#include <selection/kselection.h>
+#include "ws_util.h"
+//#include <selection/kselection.h>
 
 #include "smo_sets.h"
 
@@ -32,18 +30,6 @@ namespace SVM {
 
 using namespace MLCommon;
 
-__global__ void init_f_idx(int n_rows, int *f_idx) {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  if (tid < n_rows) { f_idx[tid] = tid; }
-}
-
-__global__ void set_available(bool *available, int n_rows, int *idx, int n_selected){ 
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    if (tid < n_rows) available[tid] = true;
-    if (tid < n_selected) {
-        available[idx[tid]] = false;
-    }
-}
 /**
 * Working set selection for the SMO algorithm.
 */
@@ -164,6 +150,7 @@ public:
     int TPB=256;
     bool *available = this->available;
     set_available<<<ceildiv(n_rows,TPB),TPB>>>(available, n_rows, idx, n_copy1);
+    CUDA_CHECK(cudaPeekAtLastError());
     cub::DeviceSelect::If((void*)cub_temp_storage, cub_temp_storage_bytes, f_idx_sorted, f_idx_tmp, d_num_selected, n_rows, 
         [alpha, y, available, C]__device__(int idx) { 
             return available[idx] && in_lower(alpha[idx], y[idx], C); 
@@ -178,6 +165,7 @@ public:
        //std::cout<<"Filling up with unused elements\n";
        n_copy1 += n_copy2;
        set_available<<<ceildiv(n_rows,TPB),TPB>>>(available, n_rows, idx, n_copy1);
+       CUDA_CHECK(cudaPeekAtLastError());
        cub::DeviceSelect::Flagged((void*)cub_temp_storage, cub_temp_storage_bytes, f_idx, available, f_idx_tmp, d_num_selected, n_rows);
 //     cub::DeviceSelect::If((void*)cub_temp_storage, cub_temp_storage_bytes, f_idx_sorted,
 //       f_idx_tmp, # d_num_selected, n_rows, [available]__device__(int idx) {return available[idx];});

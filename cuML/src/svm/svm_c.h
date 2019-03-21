@@ -19,7 +19,7 @@
 namespace ML {
 namespace SVM {
 
-
+/*
 void svcFit(float *input,
 	        int n_rows,
 	        int n_cols,
@@ -43,6 +43,7 @@ void svcFit(double *input,
             double *b,
 	        double C,
 	        double tol);
+	        */
 /*
 void svcPredict(const float *input, int n_rows, int n_cols, const float *coef,
 		float *preds);

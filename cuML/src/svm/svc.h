@@ -45,19 +45,32 @@ namespace SVM {
 using namespace MLCommon;
                 
 template<typename math_t, typename label_t>
-void svcFit(math_t *input,
-		    int n_rows,
-		    int n_cols,
-		    label_t *labels, // = y
-		    math_t **coef,
-            int *n_coefs,
-            int **support_idx,
-            math_t **x_support,
-            math_t *b,
-		    math_t C,
-		    math_t tol,
-		    cublasHandle_t cublas_handle) {
-
+class SVC {
+public:
+  int n_coefs = 0;              //< Number of non-zero dual coefficients
+  math_t *dual_coefs = nullptr; //< Non-zero dual coefficients (alpha)
+  int *support_idx = nullptr;   //< Indices of the non-zero coefficients
+  math_t *x_support = nullptr;  //< support vectors
+  math_t b;                     
+  
+  math_t C;
+  math_t tol;
+  cublasHandle_t cublas_handle;
+  
+public:
+    
+  SVC(math_t C, math_t tol) :C(C), tol(tol) {
+	CUBLAS_CHECK(cublasCreate(&cublas_handle));
+  }
+  
+  ~SVC() {
+      if (dual_coefs) CUDA_CHECK(cudaFree(dual_coefs));
+      if (support_idx) CUDA_CHECK(cudaFree(support_idx));
+      if (x_support) CUDA_CHECK(cudaFree(x_support));
+      CUBLAS_CHECK(cublasDestroy(cublas_handle));
+  }
+  
+  void fit(math_t *input, int n_rows, int n_cols, label_t *labels) {
 	ASSERT(n_cols > 0,
 			"Parameter n_cols: number of columns cannot be less than one");
 	ASSERT(n_rows > 0,
@@ -76,12 +89,11 @@ void svcFit(math_t *input,
     allocate(y, n_rows);
     get_ovr_labels(labels, n_rows, unique_labels, n_classes, y, 1);
     SmoSolver<math_t> smo(C, tol);
-    
-    smo.Solve(input, n_rows, n_cols, y, coef, n_coefs, x_support, support_idx, b, cublas_handle);   
+    smo.Solve(input, n_rows, n_cols, y, &dual_coefs, &n_coefs, &x_support, &support_idx, &b, cublas_handle);   
     CUDA_CHECK(cudaFree(y));  
     CUDA_CHECK(cudaFree(unique_labels));  
-}
-
+  }
+}; 
 
 
 /*

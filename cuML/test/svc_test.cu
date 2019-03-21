@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-//#include "svm/svc.h"
-#include "svm/svm_c.h"
+#include "svm/svc.h"
+//#include "svm/svm_c.h"
 #include "svm/classlabels.h"
 #include <gtest/gtest.h>
 #include <cuda_utils.h>
@@ -44,24 +44,19 @@ TEST(SvcSolverTest, SvcTest) {
 
   float epsilon = 0.001;
   
-  float *dual_coefs;
-  int n_coefs;
-  int *idx;
-  float *x_support;
-  float b;
-  int *support_idx;
   std::cout<<"Running LargeC test\n";
   
-  svcFit(x_dev, n_rows, n_cols, y_dev, &dual_coefs, &n_coefs, &support_idx, &x_support, &b, 1.0f, 1e-3f);
-  
-  ASSERT_LE(n_coefs, 4);
+  SVC<float, float> svc(1.0f, epsilon);
+  svc.fit(x_dev, n_rows, n_cols, y_dev);
+  //, &dual_coefs, &n_coefs, &support_idx, &x_support, &b
+  ASSERT_LE(svc.n_coefs, 4);
   
   float dual_coefs_host[4]; 
-  updateHost(dual_coefs_host, dual_coefs, n_coefs);  
+  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_coefs);  
   
   float dual_coefs_exp[] = { -2, 4, -2, 0, 0 };
   float ay = 0;
-  for (int i=0; i<n_coefs; i++) {
+  for (int i=0; i<svc.n_coefs; i++) {
     ay += dual_coefs_host[i];
   }
   // \sum \alpha_i y_i = 0
@@ -69,32 +64,26 @@ TEST(SvcSolverTest, SvcTest) {
 
 //   
    float x_support_host[8];
-   updateHost(x_support_host, x_support, n_coefs * n_cols);
+   updateHost(x_support_host, svc.x_support, svc.n_coefs * n_cols);
    float x_support_exp[] = { 1, 1, 2,  1, 2, 2, 0,0};
-   for (int i=0; i<n_coefs*n_cols; i++) {
+   for (int i=0; i<svc.n_coefs*n_cols; i++) {
    //  EXPECT_FLOAT_EQ(x_support_host[i], x_support_exp[i]) << "dual coeff idx " << i;
    }
    
    
    float w[] = {0,0};
    
-   for (int i=0; i<n_coefs; i++) {
+   for (int i=0; i<svc.n_coefs; i++) {
        w[0] += x_support_host[i] * dual_coefs_host[i]; 
-       w[1] += x_support_host[i + n_coefs] * dual_coefs_host[i];      
+       w[1] += x_support_host[i + svc.n_coefs] * dual_coefs_host[i];      
    }
    // for linear separable problems (large C) it should be unique
    // we should norm it and check the direction
    EXPECT_LT(abs(w[0] - (-0.4)), epsilon);
    EXPECT_LT(abs(w[1] - 1.2), epsilon);
   
-   EXPECT_FLOAT_EQ(b, -1.8f);
+   EXPECT_FLOAT_EQ(svc.b, -1.8f);
  
-
-  if (n_coefs > 0) {
-    CUDA_CHECK(cudaFree(dual_coefs));
-    CUDA_CHECK(cudaFree(support_idx));
-    CUDA_CHECK(cudaFree(x_support));
-  }
   CUDA_CHECK(cudaFree(x_dev));
   CUDA_CHECK(cudaFree(y_dev));
 }
@@ -152,8 +141,8 @@ __global__ void init_training_vectors(float * x, int n_rows, int n_cols, float *
 }
 
 TEST(SvcSolverTest, SvcTestLarge) {
-  int n_rows = 100;
-  int n_cols = 280;
+  int n_rows = 1000;
+  int n_cols = 780;
   int n_ws = n_rows;
     
   float *x_dev;
@@ -167,52 +156,48 @@ TEST(SvcSolverTest, SvcTestLarge) {
   
   float epsilon = 0.001;
   
-  float *dual_coefs;
-  int n_coefs;
-  int *idx;
-  float *x_support;
-  float b;
-  int *support_idx;
+  SVC<float, float> svc(1.0f, epsilon);
+  svc.fit(x_dev, n_rows, n_cols, y_dev);
   
-  svcFit(x_dev, n_rows, n_cols, y_dev, &dual_coefs, &n_coefs, &support_idx, &x_support, &b, 1.0f, 1e-3f);
+  ASSERT_LE(svc.n_coefs, n_rows);
   
-  //ASSERT_LE(n_coefs, 4);
-  
-  float dual_coefs_host[4]; 
-  updateHost(dual_coefs_host, dual_coefs, n_coefs);  
+  float *dual_coefs_host = new float[n_rows]; 
+  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_coefs);  
   
   float ay = 0;
-  for (int i=0; i<n_coefs; i++) {
+  for (int i=0; i<svc.n_coefs; i++) {
     ay += dual_coefs_host[i];
   }
   // \sum \alpha_i y_i = 0
   EXPECT_LT(abs(ay), 1.0e-6f);
 
  
-   float x_support_host[8];
-   updateHost(x_support_host, x_support, n_coefs * n_cols);
-
-   float w[] = {0,0};
-   
-   for (int i=0; i<n_coefs; i++) {
-       w[0] += x_support_host[i] * dual_coefs_host[i]; 
-       w[1] += x_support_host[i + n_coefs] * dual_coefs_host[i];      
+  float *x_support_host = new float[n_rows * n_cols];
+  
+  updateHost(x_support_host, svc.x_support, svc.n_coefs * n_cols); 
+  
+   float *w = new float[n_cols];
+   memset(w, 0, sizeof(float)*n_cols);
+   for (int i=0; i<svc.n_coefs; i++) {
+       for (int k=0; k<n_cols; k++) {
+         w[k] += x_support_host[i + k*svc.n_coefs] * dual_coefs_host[i];   
+       }
    }
+   
    // for linear separable problems (large C) it should be unique
    // we should norm it and check the direction
-   //EXPECT_LT(abs(w[0] - (-0.4)), epsilon);
-   //EXPECT_LT(abs(w[1] - 1.2), epsilon);
-  
-   //EXPECT_FLOAT_EQ(b, -1.8f);
- 
-
-  if (n_coefs > 0) {
-    CUDA_CHECK(cudaFree(dual_coefs));
-    CUDA_CHECK(cudaFree(support_idx));
-    CUDA_CHECK(cudaFree(x_support));
+  for (int k=0; k<n_cols; k++) {
+  //  EXPECT_LT(abs(w[k] - 5.00001139), epsilon) << k;
   }
+  
+  //EXPECT_FLOAT_EQ(svc.b, -1.50995291e+09f);
+ 
+  
   CUDA_CHECK(cudaFree(x_dev));
   CUDA_CHECK(cudaFree(y_dev));
+  delete[] dual_coefs_host;
+  delete[] x_support_host;
+  delete[] w;
 }
 
 }; // end namespace SVM

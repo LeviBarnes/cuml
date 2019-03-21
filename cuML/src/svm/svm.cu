@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-
+/*
 #include "svc.h"
 #include "svm_c.h"
 #include "ml_utils.h"
@@ -88,6 +88,7 @@ void svcFit(double *input,
 
 	CUBLAS_CHECK(cublasDestroy(cublas_handle));
 }
+*/
 /*
 void svcPredict(const float *input, int n_rows, int n_cols, const float *coef,
 		 float *preds) {
@@ -115,6 +116,6 @@ void svcPredict(const double *input, int n_rows, int n_cols, const double *coef,
 
 }
 */
-}
-}
+//}
+//}
 
