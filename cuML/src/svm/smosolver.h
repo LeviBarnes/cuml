@@ -29,6 +29,7 @@
 #include <cub/device/device_select.cuh>
 #include "print_vec.h"
 #include "linalg/cublas_wrappers.h"
+#include "ws_util.h"
 
 namespace ML {
 namespace SVM {
@@ -37,7 +38,7 @@ using namespace MLCommon;
 
 
 
-/** This kernel is called once after SVM is fitted, to get collect results.
+/** This kernel is called once after SVM is fitted, to collect results.
   * 
   */
 template<typename math_t>
@@ -81,10 +82,11 @@ __global__ void CalcB(const math_t *cacheTile, int n_rows, int n_coefs,
     }
     n += blockDim.x;
   }
+  
   // return one of the b's (they should be equal for all non-bound support vector)
   __syncthreads();
   if (threadIdx.x==0) {
-      for (int i=0; i<n_coefs; i++) {
+      for (int i=0; i<n_coefs && i<1024; i++) {
           if (bval[i] < INFINITY) {
               *b = bval[i];
               break;
@@ -161,6 +163,7 @@ public:
 
   }
 
+#define SMO_WS_SIZE 256
   
   void Solve(math_t *x, int n_rows, int n_cols, math_t *y, math_t **dual_coefs, int *n_coefs, 
              math_t **x_support, int **idx, math_t *b, cublasHandle_t cublas_handle,
@@ -170,7 +173,7 @@ public:
              std::numeric_limits<int>::max();
         max_outer_iter = max(100000, max_outer_iter);
     }
-    WorkingSet<math_t> ws(n_rows);
+    WorkingSet<math_t> ws(n_rows, SMO_WS_SIZE);
     int n_ws = ws.GetSize();
     AllocateBuffers(n_rows, n_cols, n_ws);    
     Initialize(y);
@@ -186,8 +189,10 @@ public:
       
       math_t * cacheTile = cache.GetTile(ws.idx); 
 
-      SmoBlockSolve<math_t, 1024><<<1, n_ws>>>(y, n_rows, alpha, n_ws, delta_alpha, f, cacheTile,
+      SmoBlockSolve<math_t, SMO_WS_SIZE><<<1, n_ws>>>(y, n_rows, alpha, n_ws, delta_alpha, f, cacheTile,
                                   ws.idx, C, tol, return_buff, max_inner_iter);
+      CUDA_CHECK(cudaPeekAtLastError());
+
       updateHost(host_return_buff, return_buff, 2);
         
       UpdateF(f, n_rows, delta_alpha, n_ws, cacheTile, cublas_handle);
@@ -240,17 +245,19 @@ public:
     
       CUDA_CHECK(cudaPeekAtLastError());
     }
-
+    
     // calculate b
     math_t *b_dev;
     allocate(b_dev,1);
     KernelCache<math_t> cache(x, n_rows, n_cols, *n_coefs, cublas_handle);
     math_t *cacheTile = cache.GetTile(*idx);
     CalcB<<<1,1024>>>(cacheTile,  n_rows, *n_coefs, y, alpha, *dual_coefs, *idx, C, b_dev);
+    CUDA_CHECK(cudaPeekAtLastError());
+
     updateHost(b, b_dev, 1);
     
-    CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaFree(b_dev));
+    
     CUDA_CHECK(cudaFree(f_idx));
     CUDA_CHECK(cudaFree(f_idx_selected));
     CUDA_CHECK(cudaFree(d_num_selected));
