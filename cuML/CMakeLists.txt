@@ -113,8 +113,8 @@ foreach(arch ${GPU_ARCHS})
 endforeach()
 # Generate PTX (to be JIT'd at runtime) for the latest architecture
 # It is assumed that the last arch in the 'archs' is the latest!
-list(GET GPU_ARCHS -1 ptx)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_${ptx},code=compute_${ptx}")
+#list(GET GPU_ARCHS -1 ptx)
+#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_${ptx},code=compute_${ptx}")
 
 ## end nvcc options
 
@@ -189,6 +189,7 @@ add_library(cuml SHARED
             src/knn/knn.cu
             src/kalman_filter/lkf_py.cu
             src/svm/svm.cu
+            src/svm/ws_util.cu
             src/common/cumlHandle.cpp
             src/common/cuml_api.cpp
             src/umap/umap.cu
