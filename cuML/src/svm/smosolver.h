@@ -244,20 +244,19 @@ public:
           *n_coefs, *dual_coefs, *x_support);
     
       CUDA_CHECK(cudaPeekAtLastError());
-    }
-    
-    // calculate b
-    math_t *b_dev;
-    allocate(b_dev,1);
-    KernelCache<math_t> cache(x, n_rows, n_cols, *n_coefs, cublas_handle);
-    math_t *cacheTile = cache.GetTile(*idx);
-    CalcB<<<1,1024>>>(cacheTile,  n_rows, *n_coefs, y, alpha, *dual_coefs, *idx, C, b_dev);
-    CUDA_CHECK(cudaPeekAtLastError());
 
-    updateHost(b, b_dev, 1);
+      // calculate b
+      math_t *b_dev;
+      allocate(b_dev,1);
+      KernelCache<math_t> cache(x, n_rows, n_cols, *n_coefs, cublas_handle);
+      math_t *cacheTile = cache.GetTile(*idx);
+      CalcB<<<1,1024>>>(cacheTile,  n_rows, *n_coefs, y, alpha, *dual_coefs, *idx, C, b_dev);
+      CUDA_CHECK(cudaPeekAtLastError());
+
+      updateHost(b, b_dev, 1);
     
-    CUDA_CHECK(cudaFree(b_dev));
-    
+      CUDA_CHECK(cudaFree(b_dev));
+    }
     CUDA_CHECK(cudaFree(f_idx));
     CUDA_CHECK(cudaFree(f_idx_selected));
     CUDA_CHECK(cudaFree(d_num_selected));
