@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, NVIDIA CORPORATION.
+ * Copyright (c) 2019, NVIDIA CORPORATION.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,41 +16,39 @@
 
 #pragma once
 
-namespace ML {
-namespace SVM {
 
-/*
-void svcFit(float *input,
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+enum cumlError_t { CUML_SUCCESS, CUML_ERROR_UNKOWN };
+
+typedef struct
+{
+    void* ptr;
+} cumlSvcHandle_t;
+
+cumlError_t cumlSvcCreate( cumlSvcHandle_t* handle, float C, float tol);
+cumlError_t cumlSvcDestroy( cumlSvcHandle_t handle );
+
+
+cumlError_t svcFit(cumlSvcHandle_t handle,
+            float *input,
 	        int n_rows,
 	        int n_cols,
-	        float *labels,
-	        float **coef,
-            int *n_coefs,
-            int **support_idx,
-            float **x_support,
-            float *b,
-	        float C,
-	        float tol);
+	        float *labels);
 
-void svcFit(double *input,
+cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_coefs);
+
+/*
+void svcFit(cumlSvcHandle_t handle,
+            double *input,
 	        int n_rows,
 	        int n_cols,
-	        double *labels,
-	        double **coef,
-            int *n_coefs,
-            int **support_idx,
-            double **x_support,
-            double *b,
-	        double C,
-	        double tol);
-	        */
-/*
-void svcPredict(const float *input, int n_rows, int n_cols, const float *coef,
-		float *preds);
-
-void svcPredict(const double *input, int n_rows, int n_cols,
-		const double *coef, double *preds);
-
+	        double *labels);
 */
+
+#ifdef __cplusplus
 }
-}
+#endif
