@@ -188,9 +188,8 @@ add_library(cuml SHARED
             src/glm/glm.cu
             src/knn/knn.cu
             src/kalman_filter/lkf_py.cu
-            src/svm/svm.cu
+            src/svm/svm_c.cu
             src/svm/svc.cu
-            src/svm/svc_c.cpp
             src/svm/ws_util.cu
             src/common/cumlHandle.cpp
             src/common/cuml_api.cpp

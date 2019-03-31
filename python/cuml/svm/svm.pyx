@@ -13,7 +13,6 @@
 # limitations under the License.
 #
 
-#cimport svm
 import numpy as np
 cimport numpy as np
 from numba import cuda
@@ -31,53 +30,26 @@ from libc.stdint cimport uintptr_t
 #from cuml.common.handle cimport cumlHandle
 #from cuml.decomposition.utils cimport *
 
-cdef extern from "svm/svc_c.h" namespace "ML::SVM":
-   cdef cppclass SVC_py:
-       int n_coefs
-       float b
-       SVC_py(float, float)
-       void fit(float *, int, int, float *)
+cdef extern from "svm/svc.h" namespace "ML::SVM":
 
-cdef class SVC_py_wrapper:
-   cdef SVC_py* svc
-   def __init__(self, tol=1e-3, C=1):
-       self.svc = new SVC_py(C, tol)
-   def __dealloc__(self):
-           del self.svc
-   def fit(self, int X_ptr, int n_rows, int n_cols, float * y_ptr):
-       self.svc.fit(<float*>X_ptr,
-                 <int>n_rows,
-                 <int>n_cols,
-                 <float*>y_ptr)
+  cdef cppclass CppSVC "ML::SVM::SVC" [math_t,label_t]:
+       int n_coefs
+       math_t *dual_coefs
+       int *support_idx
+       math_t b
+       math_t C
+       math_t tol
+       CppSVC(math_t C, math_t tol) except+
+       void fit(math_t *input, int n_rows, int n_cols, label_t *labels) except+
 
 class SVC: #(Base):
-    #cdef CppSVC[float, float]* svc
-    # cdef SVC_py* svc
-    # cdef float tol
-    # cdef float C
-    # cdef float* dual_coefs_
-    # cdef float intercept_
-
     def __init__(self, tol=1e-3, C=1, handle=None, verbose=False):
         #super(SVC, self).__init__(handle, verbose)
-
-        #self.svc = new svm.CppSVC[float, float](C, tol)
-        #self.svc = new SVC_py(C, tol)
-        self.svc = SVC_py_wrapper(C, tol)
         self.tol = tol
         self.C = C
-        #self.dual_coefs_ = None
-        #self.intercept_ = None
-
-    def __dealloc__(self):
-        #del self.svc
-        pass
-
-    def n_support(self):
-        return self.svc.svc.n_coefs
-
-    def intercept_(self):
-        return self.svc.svc.b
+        self.dual_coefs_ = None
+        self.intercept_ = None
+        self.n_support_ = None
 
     def _get_kernel_int(self, loss):
         return {
@@ -127,7 +99,6 @@ class SVC: #(Base):
             raise TypeError(msg)
 
         X_ptr = self._get_ctype_ptr(X_m)
-
         cdef uintptr_t y_ptr
         if (isinstance(y, cudf.Series)):
             y_ptr = self._get_column_ptr(y)
@@ -137,31 +108,26 @@ class SVC: #(Base):
         else:
             msg = "y vector must be a cuDF series or Numpy ndarray"
             raise TypeError(msg)
-
-        #self.coef_ = cudf.Series(np.zeros(self.n_cols, dtype=self.gdf_datatype))
-
+        cdef CppSVC[float, float]* svc2 = NULL
+        cdef CppSVC[double, double]* svc2d = NULL
         if self.gdf_datatype.type == np.float32:
-            self.svc.fit(X_ptr, self.n_rows,self.n_cols, y_ptr)
-            # self.svc.fit(<float*>X_ptr,
-            #             <int>self.n_rows,
-            #             <int>self.n_cols,
-            #             <float*>y_ptr)
-            pass
+            #self.fit2(X_ptr, self.n_rows, self.n_cols, y_ptr)
+            svc2 = new CppSVC[float,float](self.C, self.tol)
+            svc2.fit(<float*>X_ptr, <int>self.n_rows,
+                        <int>self.n_cols, <float*>y_ptr)
+            self.intercept_ = svc2.b
+            self.n_support_ = svc2.n_coefs
         else:
-            msg = "only float32 data type supported at the moment"
-            raise TypeError(msg)
-            #svm.svcFit(<double*>X_ptr,
-                       #<int>self.n_rows,
-                       #<int>self.n_cols,
-                       #<double*>y_ptr,
-                       #<double**>&coef_ptr,
-                       #&n_coefs,
-                       #<int**> &support_idx_ptr,
-                       #<double**> x_support_ptr,
-                       #&db,
-                       #<double>self.C,
-                       #<double>self.tol)
-            #self.intercept_ = db
+            svc2d = new CppSVC[double,double](self.C, self.tol)
+            svc2d.fit(<double*>X_ptr, <int>self.n_rows,
+                      <int>self.n_cols, <double*>y_ptr)
+            self.intercept_ = svc2d.b
+            self.n_support_ = svc2d.n_coefs
+            #msg = "only float32 data type supported at the moment"
+            #raise TypeError(msg)
+
+        del svc2
+        del svc2d
         return self
 
     def predict(self, X):
