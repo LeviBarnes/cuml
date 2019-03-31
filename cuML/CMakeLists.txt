@@ -62,7 +62,7 @@ set(CUTLASS_DIR ${PROJECT_SOURCE_DIR}/external/ml-prims/external/cutlass CACHE S
   "Path to the cutlass repo")
 set(CUDA_nvgraph_LIBRARY ${CUDA_TOOLKIT_ROOT_DIR}/lib64/libnvgraph.so CACHE STRING
   "Path to nvGraph lib")
-  
+
 ###################################################################################################
 # - User Options  ---------------------------------------------------------------------------------
 
@@ -189,6 +189,8 @@ add_library(cuml SHARED
             src/knn/knn.cu
             src/kalman_filter/lkf_py.cu
             src/svm/svm.cu
+            src/svm/svc.cu
+            src/svm/svc_c.cpp
             src/svm/ws_util.cu
             src/common/cumlHandle.cpp
             src/common/cuml_api.cpp
@@ -196,16 +198,16 @@ add_library(cuml SHARED
 	    src/solver/solver.cu
             )
 
-set(CUML_LINK_LIBRARIES 
-	${CUDA_cublas_LIBRARY} 
-	${CUDA_curand_LIBRARY} 
-	${CUDA_cusolver_LIBRARY} 
-	${CUDA_CUDART_LIBRARY} 
-	${CUDA_cusparse_LIBRARY} 
-	${CUDA_nvgraph_LIBRARY} 
-	${ZLIB_LIBRARIES} 
-	gpufaisslib 
-	faisslib 
+set(CUML_LINK_LIBRARIES
+	${CUDA_cublas_LIBRARY}
+	${CUDA_curand_LIBRARY}
+	${CUDA_cusolver_LIBRARY}
+	${CUDA_CUDART_LIBRARY}
+	${CUDA_cusparse_LIBRARY}
+	${CUDA_nvgraph_LIBRARY}
+	${ZLIB_LIBRARIES}
+	gpufaisslib
+	faisslib
 	${BLAS_LIBRARIES})
 
 if(OPENMP_FOUND)
@@ -235,8 +237,8 @@ target_link_libraries(ml_test
                       cuml
                       pthread
                       z)
-                      
-                      
+
+
 ###################################################################################################
 # - build test executable -------------------------------------------------------------------------
 
@@ -270,8 +272,3 @@ endif(NOT DISABLE_EXAMPLES OR NOT ${DISABLE_EXAMPLES})
 
 install(TARGETS cuml
         DESTINATION lib)
-        
-
-
-		
-
