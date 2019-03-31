@@ -16,26 +16,8 @@
 
 #pragma once
 
-#include "ml_utils.h"
-#include <cuda_utils.h>
-#include <cub/cub.cuh>
-#include <limits.h>
-#include <linalg/ternary_op.h>
-
+#include <cuda_runtime.h>
 #include "smosolver.h"
-
-#include <linalg/gemv.h>
-#include <stats/mean.h>
-#include <stats/mean_center.h>
-#include <linalg/add.h>
-#include <linalg/subtract.h>
-#include <linalg/norm.h>
-#include <linalg/eltwise.h>
-#include <linalg/unary_op.h>
-#include <linalg/cublas_wrappers.h>
-
-#include <linalg/map_then_reduce.h>
-
 #include <iostream>
 #include "classlabels.h"
 
@@ -43,7 +25,7 @@ namespace ML {
 namespace SVM {
 
 using namespace MLCommon;
-                
+
 template<typename math_t, typename label_t>
 class SVC {
 public:
@@ -51,25 +33,25 @@ public:
   math_t *dual_coefs = nullptr; //< Non-zero dual coefficients (alpha)
   int *support_idx = nullptr;   //< Indices of the non-zero coefficients
   math_t *x_support = nullptr;  //< support vectors
-  math_t b;                     
-  
+  math_t b;
+
   math_t C;
   math_t tol;
   cublasHandle_t cublas_handle;
-  
+
 public:
-    
+
   SVC(math_t C, math_t tol) :C(C), tol(tol) {
 	CUBLAS_CHECK(cublasCreate(&cublas_handle));
   }
-  
+
   ~SVC() {
       if (dual_coefs) CUDA_CHECK(cudaFree(dual_coefs));
       if (support_idx) CUDA_CHECK(cudaFree(support_idx));
       if (x_support) CUDA_CHECK(cudaFree(x_support));
       CUBLAS_CHECK(cublasDestroy(cublas_handle));
   }
-  
+
   void fit(math_t *input, int n_rows, int n_cols, label_t *labels) {
 	ASSERT(n_cols > 0,
 			"Parameter n_cols: number of columns cannot be less than one");
@@ -78,22 +60,22 @@ public:
 
      // calculate the size of the working set
     int n_ws = min(1024, n_rows); // TODO: also check if we fit in memory (we will need n_ws*n_rows space for kernel cache)
-    
+
     label_t *unique_labels = nullptr;
     int n_classes;
     get_unique_classes(labels, n_rows,  &unique_labels, &n_classes);
     ASSERT(n_classes == 2,
            "We have only binary classification implemented at the moment");
-    
+
     math_t *y;
     allocate(y, n_rows);
     get_ovr_labels(labels, n_rows, unique_labels, n_classes, y, 1);
     SmoSolver<math_t> smo(C, tol);
-    smo.Solve(input, n_rows, n_cols, y, &dual_coefs, &n_coefs, &x_support, &support_idx, &b, cublas_handle);   
-    CUDA_CHECK(cudaFree(y));  
-    CUDA_CHECK(cudaFree(unique_labels));  
+    smo.Solve(input, n_rows, n_cols, y, &dual_coefs, &n_coefs, &x_support, &support_idx, &b, cublas_handle);
+    CUDA_CHECK(cudaFree(y));
+    CUDA_CHECK(cudaFree(unique_labels));
   }
-}; 
+};
 
 
 /*
