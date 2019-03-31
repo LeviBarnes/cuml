@@ -66,6 +66,7 @@ __global__ void collect_rows(const math_t *x, int n_rows, int n_cols,
 */ 
 template<typename math_t>
 class KernelCache {
+private:
   const math_t *x;
   math_t *x_ws; // feature vectors in the current working set
   int *ws_idx_prev; 
@@ -77,15 +78,32 @@ class KernelCache {
   math_t *tile = nullptr;
   cublasHandle_t cublas_handle;
   
+  void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
+                    int, int, cublasOperation_t, cublasOperation_t, 
+                    math_t, math_t, cublasHandle_t) = nullptr;
+
+  void AllocateAll() {
+    allocate(x_ws, n_ws*n_cols);
+    allocate(tile, n_rows*n_ws);
+    allocate(ws_idx_prev, n_ws);
+  }
 public:
   KernelCache(const math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle) 
     : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
   {
-    allocate(x_ws, n_ws*n_cols);
-    allocate(tile, n_rows*n_ws);
-    allocate(ws_idx_prev, n_ws);
+    AllocateAll();
   };
   
+  KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle, 
+       void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
+                         int, int, cublasOperation_t, cublasOperation_t, 
+                         math_t, math_t, cublasHandle_t)  
+                                                        ) : kernelOp(kernelOp), x(x), n_rows(n_rows),
+                                       n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
+  {  
+    AllocateAll();
+  }
+
   ~KernelCache() {
     CUDA_CHECK(cudaFree(tile));
     CUDA_CHECK(cudaFree(x_ws));
@@ -101,16 +119,23 @@ public:
    */
   math_t* GetTile(int *ws_idx) {
     // collect all the feature wectors in the working set
-    const int TPB=256;
-    collect_rows<<<ceildiv(n_ws*n_cols,TPB), TPB>>>(x, n_rows, n_cols, x_ws, n_ws, ws_idx);
-    CUDA_CHECK(cudaPeekAtLastError());
+	if (n_ws > 0) {
+      const int TPB=256;
+      CUDA_CHECK(cudaPeekAtLastError());
+      collect_rows<<<ceildiv(n_ws*n_cols,TPB), TPB>>>(x, n_rows, n_cols, x_ws, n_ws, ws_idx);
+      CUDA_CHECK(cudaPeekAtLastError());
 
-    //calculate kernel function values for indices in ws_idx
-    LinAlg::gemm(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
-          CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle);
-    
-    n_ws_prev = n_ws;
-    copy(ws_idx_prev, ws_idx, n_ws);
+      //calculate kernel function values for indices in ws_idx
+      if (kernelOp) {
+         (*kernelOp)(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
+            CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+      } else {
+         LinAlg::gemm(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
+            CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+      }
+      n_ws_prev = n_ws;
+      copy(ws_idx_prev, ws_idx, n_ws);
+    }
     return tile;
   }
 };
