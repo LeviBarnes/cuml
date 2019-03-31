@@ -13,32 +13,36 @@
 # limitations under the License.
 #
 
-from libcpp cimport bool
+# cython: profile=False
+# distutils: language = c++
+# cython: embedsignature = True
+# cython: language_level = 3
 
-cdef extern from "svm/svm_c.h" namespace "ML::SVM":
+#cdef extern from "svm/svc.h" namespace "ML::SVM":
+cdef extern from "svm/svc_c.h" namespace "ML::SVM":
 
-    cdef void svcFit(float *input,
-	                 int n_rows,
-	                 int n_cols,
-	                 float *labels,
-	                 float **coef,
-	                 int *n_coefs,
-	                 int **support_idx,
-	                 float **x_support,
-	                 float *b,
-	                 float C,
-	                 float tol)
+  # cdef cppclass CppSVC "ML::SVM::SVC" [math_t,label_t]:
+  #      int n_coefs
+  #      math_t *dual_coefs
+  #      int *support_idx
+  #      math_t b
+  #      math_t C
+  #      math_t tol
+  #      CppSVC(math_t C, math_t tol) except+
+  #      void fit(math_t *input, int n_rows, int n_cols, label_t *labels) except+
 
-    
-    cdef void svcFit(double *input,
-	                 int n_rows,
-	                 int n_cols,
-	                 double *labels,
-	                 double **coef,
-	                 int *n_coefs,
-	                 int **support_idx,
-	                 double **x_support,
-	                 double *b,
-	                 double C,
-	                 double tol)
-	                 
+   cdef cppclass CppSVC "ML::SVM::SVC_py":
+       int n_coefs
+       float b
+       CppSVC_py(float C, float tol) except+
+       void fit(float *input, int n_rows, int n_cols, float *labels) except+
+
+   # cdef cppclass CppSVC "ML::SVM::SVC":
+   #     int n_coefs
+   #     float *dual_coefs
+   #     int *support_idx
+   #     float b
+   #     float C
+   #     float tol
+   #     CppSVC(float C, float tol) except+
+   #    void fit(float *input, int n_rows, int n_cols, float *labels) except+
