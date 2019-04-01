@@ -27,19 +27,19 @@ using namespace MLCommon;
 
 /**
  * @brief Collect rows of the training data into contiguous space
- * 
+ *
  * The working set is a subset of all the training examples. Here we collect
  * all the training vectors that are in the working set.
- * 
+ *
  * @param x training data in column major format
  * @param n_rows
  * @param n_cols
  * @param x_ws outptut all the training vectors in the working set in column major format.
- * @param n_ws the number of elements in the working set 
+ * @param n_ws the number of elements in the working set
  * @param ws_idx an array of all the working set indices (row indices of x)
  */
 template <typename math_t>
-__global__ void collect_rows(const math_t *x, int n_rows, int n_cols, 
+__global__ void collect_rows(const math_t *x, int n_rows, int n_cols,
                               math_t *x_ws, int n_ws, const int *ws_idx)
 {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -55,52 +55,58 @@ __global__ void collect_rows(const math_t *x, int n_rows, int n_cols,
 
 /**
 * @brief Buffer to store a kernel tile
-* 
+*
 * We calculate the kernel matrix for the vectors in the working set.
 * For every vector x_i in the working set, we alwas calculate a full row of the kernel matrix K(x_j, x_i), j=1..n_rows.
-* 
+*
 * A kernel tile stores all the kernel rows for the working set, i.e.  K(x_j, x_i) for all i in the working set, and j in 1..n_rows.
-* 
+*
 * Currently we just buffer the kernel values before we call the SmoBlockSolver.
 * In the future we probably should can keep a larger cache and use that to avoid repeated kernel calculations.
-*/ 
+*/
 template<typename math_t>
 class KernelCache {
 private:
   const math_t *x;
   math_t *x_ws; // feature vectors in the current working set
-  int *ws_idx_prev; 
+  int *ws_idx_prev;
   int n_ws_prev = 0;
   int n_rows;
   int n_cols;
   int n_ws;
-  
+  int cache_size = 200; // MiB
+  int n_cache; // number of rows cached
+
   math_t *tile = nullptr;
+  math_t *cache = nullptr;
   cublasHandle_t cublas_handle;
-  
-  void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
-                    int, int, cublasOperation_t, cublasOperation_t, 
+
+  void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*,
+                    int, int, cublasOperation_t, cublasOperation_t,
                     math_t, math_t, cublasHandle_t) = nullptr;
 
   void AllocateAll() {
     allocate(x_ws, n_ws*n_cols);
     allocate(tile, n_rows*n_ws);
     allocate(ws_idx_prev, n_ws);
+    n_cache = cache_size * 1024*1024 / sizeof(math_t) / n_cols;
+    //allocate(cache, n_cache); //not yet used
   }
 public:
-  KernelCache(const math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle) 
-    : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
+  KernelCache(const math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle, int cache_size = 200)
+    : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle),
+      cache_size(cache_size)
   {
     AllocateAll();
   };
-  
-  KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle, 
-       void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*, 
-                         int, int, cublasOperation_t, cublasOperation_t, 
-                         math_t, math_t, cublasHandle_t)  
+
+  KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle,
+       void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*,
+                         int, int, cublasOperation_t, cublasOperation_t,
+                         math_t, math_t, cublasHandle_t)
                                                         ) : kernelOp(kernelOp), x(x), n_rows(n_rows),
                                        n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
-  {  
+  {
     AllocateAll();
   }
 
@@ -108,11 +114,41 @@ public:
     CUDA_CHECK(cudaFree(tile));
     CUDA_CHECK(cudaFree(x_ws));
     CUDA_CHECK(cudaFree(ws_idx_prev));
+    //CUDA_CHECK(cudaFree(cache));
   };
 
+
+  /**
+   * @brief Calculate kernel function values for vectors x1 and x2
+   * @param x1 [n1 x n_cols] feature vectors
+   * @param x2 [n2 x n_cols] feature vectors
+   * @param K buffer for return values [n1xn2] (should be already allocated)
+   */
+  void calcKernel(const math_t *x1, int n1, const math_t *x2, int n2, math_t *K,
+      int ld1=0, int ld2=0) {
+    //calculate kernel function values for indices in ws_idx
+    if (ld1<=0) {
+      ld1 = n1;
+    }
+    if (ld2<=0) {
+      ld2 = n2;
+    }
+    if (kernelOp) {
+       (*kernelOp)(x1, n1, n_cols, x2, tile, n1, n2, CUBLAS_OP_N,
+          CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+    } else {
+      math_t alpha = 1;
+      math_t beta = 0;
+      // LinAlg::gemm(x1, n1, n_cols, x2, tile, n1, n2, CUBLAS_OP_N,
+       //   CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+       CUBLAS_CHECK(LinAlg::cublasgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T,
+         n1, n2, n_cols, &alpha, x1, ld1, x2, ld2, &beta, K, n1));
+    }
+
+  }
   /**
    * @brief Get all the kernel matrix rows for the working set.
-   * @param ws_idx indices of the working set 
+   * @param ws_idx indices of the working set
    * @return pointer to the kernel tile [ n_rows x n_ws] K_j,i = K(x_j, x_q) where j=1..n_rows and q = ws_idx[i], j is the contiguous dimension
    * @note currently we just recalculate every value.
    * We have implemented linear kernels so far
@@ -125,14 +161,8 @@ public:
       collect_rows<<<ceildiv(n_ws*n_cols,TPB), TPB>>>(x, n_rows, n_cols, x_ws, n_ws, ws_idx);
       CUDA_CHECK(cudaPeekAtLastError());
 
-      //calculate kernel function values for indices in ws_idx
-      if (kernelOp) {
-         (*kernelOp)(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
-            CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
-      } else {
-         LinAlg::gemm(x, n_rows, n_cols, x_ws, tile, n_rows, n_ws, CUBLAS_OP_N,
-            CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
-      }
+      calcKernel(x, n_rows, x_ws, n_ws, tile);
+      
       n_ws_prev = n_ws;
       copy(ws_idx_prev, ws_idx, n_ws);
     }
@@ -140,5 +170,5 @@ public:
   }
 };
 
-}; // end namespace SVM 
+}; // end namespace SVM
 }; // end namespace ML

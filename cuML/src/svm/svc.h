@@ -25,9 +25,12 @@ template<typename math_t, typename label_t>
 class SVC {
 public:
   int n_coefs = 0;              //< Number of non-zero dual coefficients
+  int n_cols = 0;
   math_t *dual_coefs = nullptr; //< Non-zero dual coefficients (alpha)
   int *support_idx = nullptr;   //< Indices of the non-zero coefficients
   math_t *x_support = nullptr;  //< support vectors
+  int n_classes;
+  label_t *unique_labels = nullptr;
   math_t b;
 
   math_t C;
@@ -39,22 +42,9 @@ public:
   SVC(math_t C, math_t tol);
   ~SVC();
   void fit(math_t *input, int n_rows, int n_cols, label_t *labels);
+  void predict(math_t *input, int n_rows, int n_cols, label_t *preds);
 };
 
-
-/*
-template<typename math_t>
-void svcPredict(const math_t *input, int n_rows, int n_cols, const math_t *coef,
-		math_t intercept, math_t *preds, ML::loss_funct loss, cublasHandle_t cublas_handle) {
-
-	ASSERT(n_cols > 1,
-			"Parameter n_cols: number of columns cannot be less than two");
-	ASSERT(n_rows > 1,
-			"Parameter n_rows: number of rows cannot be less than two");
-
-    std::cout<<"Hello SVM prediction World!\n";
-}
-*/
 /** @} */
 }
 ;

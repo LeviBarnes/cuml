@@ -16,10 +16,13 @@
 import numpy as np
 cimport numpy as np
 from numba import cuda
+from numba.cuda.cudadrv.devicearray import DeviceNDArray
+
 import cudf
 from libcpp cimport bool
 import ctypes
 from libc.stdint cimport uintptr_t
+from sklearn.exceptions import NotFittedError
 
 # cython: profile=False
 # distutils: language = c++
@@ -41,6 +44,7 @@ cdef extern from "svm/svc.h" namespace "ML::SVM":
        math_t tol
        CppSVC(math_t C, math_t tol) except+
        void fit(math_t *input, int n_rows, int n_cols, label_t *labels) except+
+       void predict(math_t *input, int n_rows, int n_cols, label_t *preds) except+
 
 class SVC: #(Base):
     def __init__(self, tol=1e-3, C=1, handle=None, verbose=False):
@@ -50,6 +54,20 @@ class SVC: #(Base):
         self.dual_coefs_ = None
         self.intercept_ = None
         self.n_support_ = None
+        self.gdf_datatype = None
+        self.svcHandle = None
+
+    def __dealloc__(self):
+        cdef CppSVC[float,float]* svc_f
+        cdef CppSVC[double,double]* svc_d
+        cdef size_t p = self.svcHandle
+        if self.svcHandle is not None:
+            if self.gdf_datatype.type == np.float32:
+                svc_f = <CppSVC[float,float]*> p
+            if self.gdf_datatype.type == np.float64:
+                svc_d = <CppSVC[double,double]*> p
+            else:
+                raise TypeError("Unknown type for SVC class")
 
     def _get_kernel_int(self, loss):
         return {
@@ -108,26 +126,33 @@ class SVC: #(Base):
         else:
             msg = "y vector must be a cuDF series or Numpy ndarray"
             raise TypeError(msg)
-        cdef CppSVC[float, float]* svc2 = NULL
-        cdef CppSVC[double, double]* svc2d = NULL
+
+        cdef CppSVC[float, float]* svc_f = NULL
+        cdef CppSVC[double, double]* svc_d = NULL
+
         if self.gdf_datatype.type == np.float32:
             #self.fit2(X_ptr, self.n_rows, self.n_cols, y_ptr)
-            svc2 = new CppSVC[float,float](self.C, self.tol)
-            svc2.fit(<float*>X_ptr, <int>self.n_rows,
+            svc_f = new CppSVC[float,float](self.C, self.tol)
+            svc_f.fit(<float*>X_ptr, <int>self.n_rows,
                         <int>self.n_cols, <float*>y_ptr)
-            self.intercept_ = svc2.b
-            self.n_support_ = svc2.n_coefs
+            self.intercept_ = svc_f.b
+            self.n_support_ = svc_f.n_coefs
+            #strides = self.gdf_datatype.type.itemsize
+            #self.dual_coefs = DeviceNDArray((self.n_support,), strides, self.gdf_datatype, gpu_data=svc_f.dual_coefs)
+            self.svcHandle = <size_t> svc_f
+            del svc_f
         else:
-            svc2d = new CppSVC[double,double](self.C, self.tol)
-            svc2d.fit(<double*>X_ptr, <int>self.n_rows,
+            svc_d = new CppSVC[double,double](self.C, self.tol)
+            svc_d.fit(<double*>X_ptr, <int>self.n_rows,
                       <int>self.n_cols, <double*>y_ptr)
-            self.intercept_ = svc2d.b
-            self.n_support_ = svc2d.n_coefs
+            self.intercept_ = svc_d.b
+            self.n_support_ = svc_d.n_coefs
+            self.svcHandle = <size_t> svc_d
+            del svc_d
             #msg = "only float32 data type supported at the moment"
             #raise TypeError(msg)
 
-        del svc2
-        del svc2d
+        del X_m
         return self
 
     def predict(self, X):
@@ -136,15 +161,18 @@ class SVC: #(Base):
 
         Parameters
         ----------
-        X : cuDF DataFrame
+        X : cuDF DataFrame or NumPy array
             Dense matrix (floats or doubles) of shape (n_samples, n_features)
 
         Returns
         ----------
-        y: cuDF DataFrame
+        y: cuDF DataFrame or NumPy array
            Dense vector (floats or doubles) of shape (n_samples, 1)
 
         """
+
+        if self.svcHandle is None:
+            raise NotFittedError("Call fit before prediction")
 
         cdef uintptr_t X_ptr
         if (isinstance(X, cudf.DataFrame)):
@@ -163,30 +191,32 @@ class SVC: #(Base):
             msg = "X matrix format  not supported"
             raise TypeError(msg)
 
+        if self.gdf_datatype.type != pred_datatype.type:
+            msg = "Datatype for prediction should be the same as for fitting"
+            raise TypeError(msg)
+
         X_ptr = self._get_ctype_ptr(X_m)
 
-        cdef uintptr_t coef_ptr = self._get_column_ptr(self.coef_)
         preds = cudf.Series(np.zeros(n_rows, dtype=pred_datatype))
         cdef uintptr_t preds_ptr = self._get_column_ptr(preds)
 
+        cdef CppSVC[float,float]* svc_f
+        cdef CppSVC[double,double]* svc_d
+        cdef size_t p = self.svcHandle
 
-        #if pred_datatype.type == np.float32:
-            #sgd.sgdPredict(<float*>X_ptr,
-                           #<int>n_rows,
-                           #<int>n_cols,
-                           #<float*>coef_ptr,
-                           #<float>self.intercept_,
-                           #<float*>preds_ptr,
-                           #<int>self.loss)
-        #else:
-            #sgd.sgdPredict(<double*>X_ptr,
-                           #<int>n_rows,
-                           #<int>n_cols,
-                           #<double*>coef_ptr,
-                           #<double>self.intercept_,
-                           #<double*>preds_ptr,
-                           #<int>self.loss)
+        if pred_datatype.type == np.float32:
+            svc_f = <CppSVC[float,float]*> p
+            svc_f.predict(<float*>X_ptr,
+                          <int>n_rows,
+                          <int>n_cols,
+                          <float*>preds_ptr)
+        else:
+            svc_d = <CppSVC[double,double]*> p
+            svc_d.predict(<double*>X_ptr,
+                          <int>n_rows,
+                          <int>n_cols,
+                          <double*>preds_ptr)
 
-        #del(X_m)
+        del(X_m)
 
         return preds
