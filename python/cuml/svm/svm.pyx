@@ -36,7 +36,7 @@ from sklearn.exceptions import NotFittedError
 cdef extern from "svm/svc.h" namespace "ML::SVM":
 
   cdef cppclass CppSVC "ML::SVM::SVC" [math_t,label_t]:
-       int n_coefs
+       int n_support
        math_t *dual_coefs
        int *support_idx
        math_t b
@@ -136,7 +136,7 @@ class SVC: #(Base):
             svc_f.fit(<float*>X_ptr, <int>self.n_rows,
                         <int>self.n_cols, <float*>y_ptr)
             self.intercept_ = svc_f.b
-            self.n_support_ = svc_f.n_coefs
+            self.n_support_ = svc_f.n_support
             #strides = self.gdf_datatype.type.itemsize
             #self.dual_coefs = DeviceNDArray((self.n_support,), strides, self.gdf_datatype, gpu_data=svc_f.dual_coefs)
             self.svcHandle = <size_t> svc_f
@@ -146,7 +146,7 @@ class SVC: #(Base):
             svc_d.fit(<double*>X_ptr, <int>self.n_rows,
                       <int>self.n_cols, <double*>y_ptr)
             self.intercept_ = svc_d.b
-            self.n_support_ = svc_d.n_coefs
+            self.n_support_ = svc_d.n_support
             self.svcHandle = <size_t> svc_d
             del svc_d
             #msg = "only float32 data type supported at the moment"

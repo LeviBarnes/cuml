@@ -48,15 +48,15 @@ TEST(SvcSolverTest, SvcTest) {
 
   SVC<float, float> svc(1.0f, epsilon);
   svc.fit(x_dev, n_rows, n_cols, y_dev);
-  //, &dual_coefs, &n_coefs, &support_idx, &x_support, &b
-  ASSERT_LE(svc.n_coefs, 4);
+
+  ASSERT_LE(svc.n_support, 4);
 
   float dual_coefs_host[4];
-  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_coefs);
+  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_support);
 
   float dual_coefs_exp[] = { -2, 4, -2, 0, 0 };
   float ay = 0;
-  for (int i=0; i<svc.n_coefs; i++) {
+  for (int i=0; i<svc.n_support; i++) {
     ay += dual_coefs_host[i];
   }
   // \sum \alpha_i y_i = 0
@@ -64,18 +64,18 @@ TEST(SvcSolverTest, SvcTest) {
 
 //
    float x_support_host[8];
-   updateHost(x_support_host, svc.x_support, svc.n_coefs * n_cols);
+   updateHost(x_support_host, svc.x_support, svc.n_support * n_cols);
    float x_support_exp[] = { 1, 1, 2,  1, 2, 2, 0,0};
-   for (int i=0; i<svc.n_coefs*n_cols; i++) {
+   for (int i=0; i<svc.n_support*n_cols; i++) {
    //  EXPECT_FLOAT_EQ(x_support_host[i], x_support_exp[i]) << "dual coeff idx " << i;
    }
 
 
    float w[] = {0,0};
 
-   for (int i=0; i<svc.n_coefs; i++) {
+   for (int i=0; i<svc.n_support; i++) {
        w[0] += x_support_host[i] * dual_coefs_host[i];
-       w[1] += x_support_host[i + svc.n_coefs] * dual_coefs_host[i];
+       w[1] += x_support_host[i + svc.n_support] * dual_coefs_host[i];
    }
    // for linear separable problems (large C) it should be unique
    // we should norm it and check the direction
@@ -165,13 +165,13 @@ TEST(SvcSolverTest, SvcTestLarge) {
   SVC<float, float> svc(1.0f, epsilon);
   svc.fit(x_dev, n_rows, n_cols, y_dev);
 
-  ASSERT_LE(svc.n_coefs, n_rows);
+  ASSERT_LE(svc.n_support, n_rows);
 
   float *dual_coefs_host = new float[n_rows];
-  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_coefs);
+  updateHost(dual_coefs_host, svc.dual_coefs, svc.n_support);
 
   float ay = 0;
-  for (int i=0; i<svc.n_coefs; i++) {
+  for (int i=0; i<svc.n_support; i++) {
     ay += dual_coefs_host[i];
   }
   // \sum \alpha_i y_i = 0
@@ -180,13 +180,13 @@ TEST(SvcSolverTest, SvcTestLarge) {
 
   float *x_support_host = new float[n_rows * n_cols];
 
-  updateHost(x_support_host, svc.x_support, svc.n_coefs * n_cols);
+  updateHost(x_support_host, svc.x_support, svc.n_support * n_cols);
 
    float *w = new float[n_cols];
    memset(w, 0, sizeof(float)*n_cols);
-   for (int i=0; i<svc.n_coefs; i++) {
+   for (int i=0; i<svc.n_support; i++) {
        for (int k=0; k<n_cols; k++) {
-         w[k] += x_support_host[i + k*svc.n_coefs] * dual_coefs_host[i];
+         w[k] += x_support_host[i + k*svc.n_support] * dual_coefs_host[i];
        }
    }
 

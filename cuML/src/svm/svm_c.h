@@ -39,7 +39,7 @@ cumlError_t svcFit(cumlSvcHandle_t handle,
 	        int n_cols,
 	        float *labels);
 
-cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_coefs);
+cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_support);
 
 /*
 void svcFit(cumlSvcHandle_t handle,

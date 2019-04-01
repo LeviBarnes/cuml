@@ -24,7 +24,7 @@ namespace SVM {
 template<typename math_t, typename label_t>
 class SVC {
 public:
-  int n_coefs = 0;              //< Number of non-zero dual coefficients
+  int n_support = 0;              //< Number of non-zero dual coefficients
   int n_cols = 0;
   math_t *dual_coefs = nullptr; //< Non-zero dual coefficients (alpha)
   int *support_idx = nullptr;   //< Indices of the non-zero coefficients

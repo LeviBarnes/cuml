@@ -183,7 +183,7 @@ public:
     int n_iter = 0;
     math_t diff = 10*tol;
     
-    while (n_iter < max_outer_iter && diff >= tol) { 
+    while (n_iter < max_outer_iter && diff >= tol) {
       CUDA_CHECK(cudaMemset(delta_alpha, 0, n_ws * sizeof(math_t)));
       ws.Select(f, alpha, y, C);
       

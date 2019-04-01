@@ -62,7 +62,7 @@ void SVC<math_t, label_t>::fit(math_t *input, int n_rows, int n_cols, label_t *l
   allocate(y, n_rows);
   get_ovr_labels(labels, n_rows, unique_labels, n_classes, y, 1);
   SmoSolver<math_t> smo(C, tol);
-  smo.Solve(input, n_rows, n_cols, y, &dual_coefs, &n_coefs, &x_support, &support_idx, &b, cublas_handle);
+  smo.Solve(input, n_rows, n_cols, y, &dual_coefs, &n_support, &x_support, &support_idx, &b, cublas_handle);
   CUDA_CHECK(cudaFree(y));
 }
 
@@ -70,27 +70,28 @@ template<typename math_t, typename label_t>
 void SVC<math_t, label_t>::predict(math_t *input, int n_rows, int n_cols, label_t *preds) {
 	ASSERT(n_cols == this->n_cols,
 			"Parameter n_cols: shall be the same that was used for fitting");
-  int n_batch = 4096 < n_rows ? 4096 : n_rows;
+#define N_PRED_BATCH 4
+// there is an error in calculating y when the batch size is small
+  int n_batch = N_PRED_BATCH < n_rows ? N_PRED_BATCH : n_rows;
   math_t *K;
   math_t *y;
-  allocate(K, n_batch*n_cols);
+  allocate(K, n_batch*n_support);
   allocate(y, n_rows);
-  KernelCache<math_t> kernel(x_support, n_coefs, n_cols, 1, cublas_handle);
+  KernelCache<math_t> kernel(x_support, n_support, n_cols, 1, cublas_handle);
   for (int i=0; i<n_rows; i+=n_batch) {
     if (i+n_batch >= n_rows) {
       n_batch = n_rows - i;
     }
-    std::cout<<"n_batch,i"<< n_batch <<", "<<i<<"\n";
-    kernel.calcKernel(input + i, n_batch, x_support, n_coefs, K, n_rows);
-    print_vec(K, n_batch * n_coefs, "K");
+    kernel.calcKernel(input + i, n_batch, x_support, n_support, K, n_rows);
     math_t one = 1;
-    CUBLAS_CHECK(LinAlg::cublasgemv(cublas_handle, CUBLAS_OP_N, n_batch, n_coefs,
+    CUBLAS_CHECK(LinAlg::cublasgemv(cublas_handle, CUBLAS_OP_N, n_batch, n_support,
        &one, K, n_batch, dual_coefs, 1, &one, y + i, 1));
-    label_t *labels = unique_labels;
-    LinAlg::unaryOp(preds + i, y, n_batch,
-      [labels]__device__(math_t y) { return y<0 ? labels[0] : labels[1]; }
-    );
   }
+  label_t *labels = unique_labels;
+  math_t b = this->b;
+  LinAlg::unaryOp(preds, y, n_rows,
+    [labels, b]__device__(math_t y) { return y+b<0 ? labels[0] : labels[1]; }
+  );
   CUDA_CHECK(cudaFree(K));
   CUDA_CHECK(cudaFree(y));
 }

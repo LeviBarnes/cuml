@@ -70,13 +70,13 @@ extern "C" cumlError_t svcFit(cumlSvcHandle_t handle, float *input, int n_rows, 
     return status;
 }
 
-extern "C" cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_coefs)
+extern "C" cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_support)
 {
     cumlError_t status = CUML_SUCCESS;
     try
     {
       *b = (reinterpret_cast<ML::SVM::SVC<float,float>*>(handle.ptr))->b;
-      *n_coefs = reinterpret_cast<ML::SVM::SVC<float,float>*>(handle.ptr)->n_coefs;
+      *n_support = reinterpret_cast<ML::SVM::SVC<float,float>*>(handle.ptr)->n_support;
     }
     catch (...)
     {
