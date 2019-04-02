@@ -16,6 +16,19 @@
 
 #pragma once
 
-__global__ void init_f_idx(int n_rows, int *f_idx);
+/**
+ * \todo Should this go to ml-prims?
+ * 
+ * \param [out] f_idx
+ * \param [in] n length of the array
+ */
+__global__ void range(int *f_idx, int n);
 
+/**
+ * Mark elements as available if they are not in the the idx list.
+ * \param [out] available flag whether an idx is available, size [n_rows]
+ * \param [in] n_rows number of training vectors
+ * \param [in] idx list of indices already selected, size [n_selected]
+ * \param [in] n_selected number of elements in the idx list
+ */
 __global__ void set_available(bool *available, int n_rows, int *idx, int n_selected);

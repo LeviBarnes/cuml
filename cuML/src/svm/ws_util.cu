@@ -21,9 +21,9 @@
 #include "smo_sets.h"
 
 
-__global__ void init_f_idx(int n_rows, int *f_idx) {
+__global__ void range(int *f_idx, int n) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  if (tid < n_rows) { f_idx[tid] = tid; }
+  if (tid < n) { f_idx[tid] = tid; }
 }
 
 __global__ void set_available(bool *available, int n_rows, int *idx, int n_selected){ 

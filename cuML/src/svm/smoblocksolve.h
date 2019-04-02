@@ -24,22 +24,23 @@
 namespace ML {
 namespace SVM {
 
+/**
+ * Solve the optimization problem for the actual working set.
+ * 
+ * TODO describe the math here.
+ */
 template<typename math_t, int WSIZE>
 __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_ws, 
       math_t *delta_alpha, math_t *f_array, math_t *kernel, int *ws_idx, 
       math_t C, math_t eps, math_t *return_buff, int max_iter = 10000)
   {
-    //typedef std::pair<math_t, int> Pair;
     typedef Selection::KVPair<math_t, int> Pair;
-    //typedef cub::KeyValuePair <int, math_t> Pair;
     typedef cub::BlockReduce<Pair, WSIZE> BlockReduce;
     typedef cub::BlockReduce<math_t, WSIZE> BlockReduceFloat;
     __shared__ union {
         typename BlockReduce::TempStorage pair; 
         typename BlockReduceFloat::TempStorage single;
     } temp_storage; 
-    //__shared__ typename BlockReduce::TempStorage temp_storage;
-    //__shared__ typename BlockReduceFloat::TempStorage temp_storage;
     
     __shared__ math_t f_u;
     __shared__ int u;
@@ -61,6 +62,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
     
     Kd[tid] = kernel[tid*n_rows + idx];
     int n_iter = 0;
+    
     for (; n_iter < max_iter; n_iter++) {
       // mask values outside of X_upper  
       math_t f_tmp = in_upper(a, y, C) ? f : INFINITY; 
@@ -72,7 +74,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
       }
       // select f_max to check stopping condition
       f_tmp = in_lower(a, y, C) ? f : -INFINITY;
-      __syncthreads();   // needed because I am reusing the shared memory buffer   
+      __syncthreads();   // needed because we are reusing the shared memory buffer   
       math_t Kui = kernel[u * n_rows + idx];
       math_t f_max = BlockReduceFloat(temp_storage.single).Reduce(f_tmp, cub::Max(), n_ws);
       
@@ -100,18 +102,12 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
           l = res.key;
       }
       __syncthreads();
-      //printf("reducmax %d %d ::%f %f\n", tid, l, f, f_tmp);
       math_t Kli = kernel[l * n_rows + idx];
       
-       //update alpha
+      // Update alpha
       //
-      // we know that 0 <= a <= C
-      // we want to ensure thath the same condition holds after we change the value of a
-      //
-      // Let us denote the new values with a', and let 
-      // math_t q = (f_l - f_u) / (Kd[u] + Kd[l] - 2 * Kui) ; >=0
-      // a'_u = 
-      
+      // We know that 0 <= a <= C
+      // We select q so that both delta alpha_u and delta alpha_l stay in this limit.
       if (threadIdx.x == u) 
             tmp_u = y > 0 ? C - a : a;
       if (threadIdx.x == l) {
@@ -128,7 +124,7 @@ __global__ void SmoBlockSolve(math_t *y_array, int n_rows, math_t* alpha, int n_
     // save results to global memory before exit
     alpha[idx] = a;
     delta_alpha[tid] = (a - a_save) * y; // it is actuall y * \Delta \alpha
-    // f is recalculated in f_update
+    // f is recalculated in f_update, therefore we do not need to save that
     return_buff[1] = n_iter;
   }
 }; // end namespace SVM

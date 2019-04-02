@@ -41,14 +41,6 @@ cumlError_t svcFit(cumlSvcHandle_t handle,
 
 cumlError_t cumlSvcGetRes( cumlSvcHandle_t handle, float *b, int *n_support);
 
-/*
-void svcFit(cumlSvcHandle_t handle,
-            double *input,
-	        int n_rows,
-	        int n_cols,
-	        double *labels);
-*/
-
 #ifdef __cplusplus
 }
 #endif

@@ -21,7 +21,6 @@
 #include "linalg/cublas_wrappers.h"
 #include "kernelcache.h"
 #include "linalg/unary_op.h"
-#include "print_vec.h"
 
 namespace ML {
 namespace SVM {
@@ -48,15 +47,15 @@ SVC<math_t, label_t>::~SVC()
 
 template<typename math_t, typename label_t>
 void SVC<math_t, label_t>::fit(math_t *input, int n_rows, int n_cols, label_t *labels) {
-	ASSERT(n_cols > 0,
-			"Parameter n_cols: number of columns cannot be less than one");
-	ASSERT(n_rows > 0,
-			"Parameter n_rows: number of rows cannot be less than one");
+  ASSERT(n_cols > 0,
+		"Parameter n_cols: number of columns cannot be less than one");
+  ASSERT(n_rows > 0,
+		"Parameter n_rows: number of rows cannot be less than one");
 
   get_unique_classes(labels, n_rows,  &unique_labels, &n_classes);
 
   ASSERT(n_classes == 2,
-           "We have only binary classification implemented at the moment");
+         "Only binary classification is implemented at the moment");
   this->n_cols = n_cols;
   math_t *y;
   allocate(y, n_rows);
@@ -69,15 +68,18 @@ void SVC<math_t, label_t>::fit(math_t *input, int n_rows, int n_cols, label_t *l
 template<typename math_t, typename label_t>
 void SVC<math_t, label_t>::predict(math_t *input, int n_rows, int n_cols, label_t *preds) {
 	ASSERT(n_cols == this->n_cols,
-			"Parameter n_cols: shall be the same that was used for fitting");
-#define N_PRED_BATCH 4
-// there is an error in calculating y when the batch size is small
+           "Parameter n_cols: shall be the same that was used for fitting");
+#define N_PRED_BATCH 4096
   int n_batch = N_PRED_BATCH < n_rows ? N_PRED_BATCH : n_rows;
   math_t *K;
   math_t *y;
   allocate(K, n_batch*n_support);
   allocate(y, n_rows);
   KernelCache<math_t> kernel(x_support, n_support, n_cols, 1, cublas_handle);
+  
+  // We process the input data batchwise:
+  //  - calculate the kernel values K[x_batch, x_support]
+  //  - calculate y(x_batch) = K[x_batch, x_support] * dual_coeffs
   for (int i=0; i<n_rows; i+=n_batch) {
     if (i+n_batch >= n_rows) {
       n_batch = n_rows - i;
@@ -87,6 +89,7 @@ void SVC<math_t, label_t>::predict(math_t *input, int n_rows, int n_cols, label_
     CUBLAS_CHECK(LinAlg::cublasgemv(cublas_handle, CUBLAS_OP_N, n_batch, n_support,
        &one, K, n_batch, dual_coefs, 1, &one, y + i, 1));
   }
+  // Look up the label based on the value of the decision function: f(x) = sign(y(x) + b)
   label_t *labels = unique_labels;
   math_t b = this->b;
   LinAlg::unaryOp(preds, y, n_rows,
@@ -95,10 +98,10 @@ void SVC<math_t, label_t>::predict(math_t *input, int n_rows, int n_cols, label_
   CUDA_CHECK(cudaFree(K));
   CUDA_CHECK(cudaFree(y));
 }
+
+// Instantiate templates for the shared library
 template class SVC<float,float>;
 template class SVC<double,double>;
-}
-;
-}
-;
-// end namespace ML
+
+}; // end namespace SVM
+}; // end namespace ML

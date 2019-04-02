@@ -24,7 +24,7 @@ namespace SVM {
 
 using namespace MLCommon;
 
-/** Determine weather a training instance is in the upper set */
+/** Determine whether a training instance is in the upper set */
 template<typename math_t> 
 DI bool in_upper(math_t a, math_t y, math_t C) {
   // return (0 < a && a < C) || ((y - 1) < eps && a < eps) || ((y + 1) < eps && (a - C) < eps);
@@ -32,7 +32,7 @@ DI bool in_upper(math_t a, math_t y, math_t C) {
   return (y < 0 && a > 0) || (y > 0 && a < C);
 }
 
-/** Determine weather a training instance is in the lower set */
+/** Determine whether a training instance is in the lower set */
 template<typename math_t> 
 DI bool in_lower(math_t a, math_t y, math_t C) {
   // return (0 < a && a < C) || ((y - 1) < eps && a < eps) || ((y + 1) < eps && (a - C) < eps);

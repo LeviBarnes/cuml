@@ -26,6 +26,13 @@ namespace SVM {
 
 using namespace MLCommon;
 
+/**
+ * Get unique class labels.
+ * \param [in] y device array of labels, size [n]
+ * \param [in] n number of labels
+ * \param [out] y_unique device array of unique labels, size [n_unique]
+ * \param [out] n_unique number of unique labels
+ */
 template<typename label_t> 
 void get_unique_classes(label_t *y, int n, label_t **y_unique, int *n_unique) {
  
@@ -40,7 +47,7 @@ void get_unique_classes(label_t *y, int n, label_t **y_unique, int *n_unique) {
   // Run sorting operation
   cub::DeviceRadixSort::SortKeys(d_temp_storage, bytes, y, y2, n);
   
-  int  *d_num_selected_out;    // e.g., [ ]
+  int  *d_num_selected_out;
   allocate(d_num_selected_out, 1);
   
   size_t bytes2 = 0;
@@ -63,6 +70,11 @@ void get_unique_classes(label_t *y, int n, label_t **y_unique, int *n_unique) {
 
 /** Relabel y to +/-1.
  *  y_out will be +1 if y the same as y_unique[idx], otherwise -1
+ * \param [in] y device array of labels, size [n]
+ * \param [in] n number of labels
+ * \param [in] y_unique device array of unique labels, size [n_unique]
+ * \param [out] y_out device array of output labels, size [n]
+ * \param [in] idx index of unique label that should be labeled as 1
  */
 template<typename label_t, typename math_t>
 __global__ void relabel(label_t *y, int n, label_t *y_unique, math_t *y_out, int idx) {
@@ -73,18 +85,30 @@ __global__ void relabel(label_t *y, int n, label_t *y_unique, math_t *y_out, int
     }
 }
 
+/**
+ * Assign one versus rest labels.
+ * 
+ * The output labels will have values +/-1:
+ * y_out = (y == y_unique[idx]) ? +1 : -1;
+ * 
+ * The output type currently is set to math_t, but we are actually free to choose other type
+ * for y_out (it should represent +/-1, and it is used in floating point arithmetics).
+ * 
+ * \param [in] y device array if input labels, size [n]
+ * \param [in] n number of labels
+ * \param [in] y_unique device array of unique labels, size [n_classes]
+ * \param [in] n_classes number of unique labels
+ * \param [out] y_out device array of output labels
+ * \param [in] idx index of unique label that should be labeled as 1
 
-// what shall be the type of y_out? char would save bandwidth, but will need conversion before arithmetics
+ */
 template<typename label_t, typename math_t>
-void get_ovr_labels(label_t *y, int n_rows, label_t *y_unique, int n_classes, math_t* y_out, int idx) {
+void get_ovr_labels(label_t *y, int n, label_t *y_unique, int n_classes, math_t* y_out, int idx) {
   int TPB=256;
-  
-  ASSERT(idx < n_classes, 
-          "Parameter idx should not be larger than the number of classes");
-  relabel<<<ceildiv(n_rows,TPB),TPB>>>(y, n_rows, y_unique, y_out, idx);
-  //copy(y, y_out, n_rows);
+  ASSERT(idx < n_classes, "Parameter idx should not be larger than the number of classes");
+  // unary op could be used if that would allow different input and output types
+  relabel<<<ceildiv(n,TPB),TPB>>>(y, n, y_unique, y_out, idx);
   CUDA_CHECK(cudaPeekAtLastError());                           
-   //LinAlg::unaryOp(y_out, y, n_rows, [y_unique, idx]__device__(label_t y_val) { return y_val == y_unique[idx] ? 1 : -1;});
 }
 
 }; // end namespace SVM

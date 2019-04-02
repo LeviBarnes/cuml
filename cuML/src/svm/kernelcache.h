@@ -31,12 +31,12 @@ using namespace MLCommon;
  * The working set is a subset of all the training examples. Here we collect
  * all the training vectors that are in the working set.
  *
- * @param x training data in column major format
- * @param n_rows
- * @param n_cols
- * @param x_ws outptut all the training vectors in the working set in column major format.
- * @param n_ws the number of elements in the working set
- * @param ws_idx an array of all the working set indices (row indices of x)
+ * @param [in] x training data in column major format, size [n_rows x n_cols]
+ * @param [in] n_rows
+ * @param [in] n_cols
+ * @param [out] x_ws training vectors in the working set in column major format, size [n_ws x n_cols]
+ * @param [in] n_ws the number of elements in the working set
+ * @param [in] ws_idx working set indices (row indices of x), size [n_ws]
  */
 template <typename math_t>
 __global__ void collect_rows(const math_t *x, int n_rows, int n_cols,
@@ -67,8 +67,8 @@ __global__ void collect_rows(const math_t *x, int n_rows, int n_cols,
 template<typename math_t>
 class KernelCache {
 private:
-  const math_t *x;
-  math_t *x_ws; // feature vectors in the current working set
+  const math_t *x;   //!< pointer to the training vectors
+  math_t *x_ws;      //!< feature vectors in the current working set
   int *ws_idx_prev;
   int n_ws_prev = 0;
   int n_rows;
@@ -93,6 +93,16 @@ private:
     //allocate(cache, n_cache); //not yet used
   }
 public:
+  /**
+   * Construct an object to manage kernel cache
+   * 
+   * @param x device array of training vectors in column major format, size [n_rows x n_cols]
+   * @param n_rows number of training vectors
+   * @param n_cols number of features
+   * @param n_ws size of working set
+   * @param cublas_handle
+   * @param cache_size not used yet
+   */
   KernelCache(const math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle, int cache_size = 200)
     : x(x), n_rows(n_rows), n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle),
       cache_size(cache_size)
@@ -100,6 +110,16 @@ public:
     AllocateAll();
   };
 
+  /**
+   * Construct an object to manage kernel cache
+   * 
+   * @param x device array of training vectors in column major format, size [n_rows x n_cols]
+   * @param n_rows number of training vectors
+   * @param n_cols number of features
+   * @param n_ws size of working set
+   * @param cublas_handle
+   * @param kernelop
+   */
   KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle,
        void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*,
                          int, int, cublasOperation_t, cublasOperation_t,
@@ -120,9 +140,9 @@ public:
 
   /**
    * @brief Calculate kernel function values for vectors x1 and x2
-   * @param x1 [n1 x n_cols] feature vectors
-   * @param x2 [n2 x n_cols] feature vectors
-   * @param K buffer for return values [n1xn2] (should be already allocated)
+   * @param [in] x1 [n1 x n_cols] feature vectors
+   * @param [in] x2 [n2 x n_cols] feature vectors
+   * @param [out] K buffer for return values [n1xn2] (should be already allocated)
    */
   void calcKernel(const math_t *x1, int n1, const math_t *x2, int n2, math_t *K,
       int ld1=0, int ld2=0) {
