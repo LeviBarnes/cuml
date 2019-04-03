@@ -213,6 +213,8 @@ add_library(cuml SHARED
             src/glm/glm.cu
             src/knn/knn.cu
             src/kalman_filter/lkf_py.cu
+            src/svm/svc.cu
+            src/svm/ws_util.cu
             src/common/cumlHandle.cpp
             src/common/cuml_api.cpp
             src/umap/umap.cu
@@ -293,6 +295,7 @@ endif(NOT DISABLE_EXAMPLES OR NOT ${DISABLE_EXAMPLES})
 
 install(TARGETS cuml
         DESTINATION lib)
+
 
 
 
