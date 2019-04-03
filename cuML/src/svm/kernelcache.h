@@ -19,6 +19,7 @@
 #include "ml_utils.h"
 #include <cuda_utils.h>
 #include <linalg/gemm.h>
+#include "nonlinear.h"
 
 namespace ML {
 namespace SVM {
@@ -81,9 +82,7 @@ private:
   math_t *cache = nullptr;
   cublasHandle_t cublas_handle;
 
-  void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*,
-                    int, int, cublasOperation_t, cublasOperation_t,
-                    math_t, math_t, cublasHandle_t) = nullptr;
+  SVMKernelBase<math_t> *kernel = 0;
 
   void AllocateAll() {
     allocate(x_ws, n_ws*n_cols);
@@ -121,11 +120,8 @@ public:
    * @param kernelop
    */
   KernelCache(math_t *x, int n_rows, int n_cols, int n_ws, cublasHandle_t cublas_handle,
-       void (*kernelOp) (const math_t*, int, int, const math_t* , math_t*,
-                         int, int, cublasOperation_t, cublasOperation_t,
-                         math_t, math_t, cublasHandle_t)
-                                                        ) : kernelOp(kernelOp), x(x), n_rows(n_rows),
-                                       n_cols(n_cols), n_ws(n_ws), cublas_handle(cublas_handle)
+         SVMKernelBase<math_t>* kernel) : kernel(kernel), x(x), n_rows(n_rows), n_cols(n_cols), 
+                                     n_ws(n_ws), cublas_handle(cublas_handle)
   {
     AllocateAll();
   }
@@ -145,7 +141,7 @@ public:
    * @param [out] K buffer for return values [n1xn2] (should be already allocated)
    */
   void calcKernel(const math_t *x1, int n1, const math_t *x2, int n2, math_t *K,
-      int ld1=0, int ld2=0) {
+      int ld1=0, int ld2=0, int ldK=0) {
     //calculate kernel function values for indices in ws_idx
     if (ld1<=0) {
       ld1 = n1;
@@ -153,9 +149,11 @@ public:
     if (ld2<=0) {
       ld2 = n2;
     }
-    if (kernelOp) {
-       (*kernelOp)(x1, n1, n_cols, x2, tile, n1, n2, CUBLAS_OP_N,
-          CUBLAS_OP_T, math_t(1.0), math_t(0.0), cublas_handle) ;
+    if (ldK<=0) {
+      ldK = n1;
+    }
+    if (kernel) {
+      kernel->evaluate(x1, ld1, n1, n_cols, x2, ld2, n2, K, ldK, cublas_handle);
     } else {
       math_t alpha = 1;
       math_t beta = 0;
