@@ -173,7 +173,7 @@ TEST(SvcSolverTest, SvcTestLarge) {
     ay += dual_coefs_host[i];
   }
   // \sum \alpha_i y_i = 0
-  EXPECT_LT(abs(ay), 1.0e-6f);
+  EXPECT_LT(abs(ay), 1.0e-5f);
 
 
   float *x_support_host = new float[n_rows * n_cols];
