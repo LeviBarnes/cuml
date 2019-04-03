@@ -105,7 +105,7 @@ void labels_close();
 extern cublasHandle_t cublas_handle[MAX_NGPUS];
 template<typename T>
 void memcpy(thrust::host_vector<T, std::allocator<T> > &H,
-		thrust::device_vector<T, thrust::device_malloc_allocator<T> > &D) {
+		thrust::device_vector<T, thrust::device_allocator<T> > &D) {
 	int dev_num;
 	safe_cuda(cudaGetDevice(&dev_num));
 	safe_cuda(
@@ -115,7 +115,7 @@ void memcpy(thrust::host_vector<T, std::allocator<T> > &H,
 }
 
 template<typename T>
-void memcpy(thrust::device_vector<T, thrust::device_malloc_allocator<T> > &D,
+void memcpy(thrust::device_vector<T, thrust::device_allocator<T> > &D,
 		thrust::host_vector<T, std::allocator<T> > &H) {
 	int dev_num;
 	safe_cuda(cudaGetDevice(&dev_num));
@@ -125,8 +125,8 @@ void memcpy(thrust::device_vector<T, thrust::device_malloc_allocator<T> > &D,
 					cudaMemcpyHostToDevice, cuda_stream[dev_num]));
 }
 template<typename T>
-void memcpy(thrust::device_vector<T, thrust::device_malloc_allocator<T> > &Do,
-		thrust::device_vector<T, thrust::device_malloc_allocator<T> > &Di) {
+void memcpy(thrust::device_vector<T, thrust::device_allocator<T> > &Do,
+		thrust::device_vector<T, thrust::device_allocator<T> > &Di) {
 	int dev_num;
 	safe_cuda(cudaGetDevice(&dev_num));
 	safe_cuda(
@@ -135,7 +135,7 @@ void memcpy(thrust::device_vector<T, thrust::device_malloc_allocator<T> > &Do,
 					cudaMemcpyDeviceToDevice, cuda_stream[dev_num]));
 }
 template<typename T>
-void memzero(thrust::device_vector<T, thrust::device_malloc_allocator<T> >& D) {
+void memzero(thrust::device_vector<T, thrust::device_allocator<T> >& D) {
 	int dev_num;
 	safe_cuda(cudaGetDevice(&dev_num));
 	safe_cuda(
