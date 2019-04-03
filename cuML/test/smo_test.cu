@@ -20,30 +20,11 @@
 #include <cuda_utils.h>
 #include <test_utils.h>
 #include <iostream>
-#include <cub/cub.cuh>   // or equivalently <cub/device/device_radix_sort.cuh>
+#include <cub/cub.cuh>   
 
 namespace ML {
 namespace SVM {
 using namespace MLCommon;
-
-
-/*
-template<typename math_t>
-class SmoSolverTest: public ::testing::Test {
-protected:
-   // SmoSolver<math_t> * smo;
-    SmoSolverTest() 
-    {
-     // smo = new SmoSolver<math_t>(10,4);
-    }
-    ~ SmoSolverTest() {
-      //delete smo;
-    }
-};
-
-typedef SmoSolverTest<float> SmoSolverTestF;
-*/
-
 
 TEST(SmoSolverTestF, SelectWorkingSetTest) {
   WorkingSet<float> *ws;
@@ -276,8 +257,7 @@ TEST(SmoSolverTest, SmoBlockSolveSingleTest) {
   CUDA_CHECK(cudaFree(return_buff_dev));
 }
 
-// note for C=10 or larger it finds a different set of support vectors
-// than scikit learn, but it still seems to be correct
+
 TEST(SmoSolverTest, SmoBlockSolveTest) {
   int n_rows = 6;
   int n_cols = 2;
@@ -590,7 +570,6 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
   float b;
   cublasHandle_t cublas_handle;
   CUBLAS_CHECK(cublasCreate(&cublas_handle));
-  std::cout<<"Running LargeC test\n";
   smo.Solve(x_dev, n_rows, n_cols, y_dev, &dual_coefs, &n_coefs, &x_support, &idx, &b, 
             cublas_handle, 100, 1);
   
@@ -629,8 +608,7 @@ TEST(SmoSolverTest, SmoSolveTestLargeC) {
       w[0] += x_support_host[i] * dual_coefs_host[i]; 
       w[1] += x_support_host[i + n_coefs] * dual_coefs_host[i];      
   }
-  // for linear separable problems (large C) it should be unique
-  // we should norm it and check the direction
+  // for linear problems it should be unique 
   EXPECT_LT(abs(w[0] - (-2)), epsilon);
   EXPECT_LT(abs(w[1] - 2), epsilon);
  

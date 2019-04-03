@@ -15,7 +15,6 @@
  */
 
 #include "svm/svc.h"
-//#include "svm/svm_c.h"
 #include "svm/classlabels.h"
 #include <gtest/gtest.h>
 #include <cuda_utils.h>
@@ -45,7 +44,6 @@ TEST(SvcSolverTest, SvcTest) {
   float epsilon = 0.001;
 
   std::cout<<"Running LargeC test\n";
-
   SVC<float, float> svc(1.0f, epsilon);
   svc.fit(x_dev, n_rows, n_cols, y_dev);
 
@@ -190,8 +188,7 @@ TEST(SvcSolverTest, SvcTestLarge) {
        }
    }
 
-   // for linear separable problems (large C) it should be unique
-   // we should norm it and check the direction
+  // for linear problems it should be unique
   for (int k=0; k<n_cols; k++) {
   //  EXPECT_LT(abs(w[k] - 5.00001139), epsilon) << k;
   }

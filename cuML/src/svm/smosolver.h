@@ -27,7 +27,6 @@
 #include "linalg/gemv.h"
 #include "linalg/unary_op.h"
 #include <cub/device/device_select.cuh>
-#include "print_vec.h"
 #include "linalg/cublas_wrappers.h"
 #include "ws_util.h"
 
