@@ -129,6 +129,16 @@ TEST(SmoSolverTest, KernelCacheTest) {
     CUDA_CHECK(cudaFree(ws_idx_dev));
 }
 
+template <typename math_t>
+class LambdaContainer {
+   //extended lambdas cannot be global scope nor can they be in the scope of a gtest
+   //This seems to work.
+
+   public:
+
+   math_t (*polynomial_kernel)(math_t) = [] __device__ __host__ (math_t a) {return (1+a)*(1+a); };
+
+};
 TEST(SmoSolverTest, KernelCacheNonLinear) {
     int n_rows = 4;
     int n_cols = 2;
@@ -157,7 +167,9 @@ TEST(SmoSolverTest, KernelCacheNonLinear) {
     CUBLAS_CHECK(cublasCreate(&cublas_handle));
     
     //Polynomial kernel with exponent=2
-    auto nonlin = new polynomialKernel<float,int>(2);
+    //auto nonlin = new polynomialKernel<float,int>(2);
+    LambdaContainer<float> lambdas;
+    auto nonlin = new generalKernel<float>(lambdas.polynomial_kernel);
     for (int z=0;z<16;z++) tile_host_expected[z] = (1+tile_host_expected[z])*(1+tile_host_expected[z]);
     KernelCache<float> *cache = 
            new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle, nonlin);
