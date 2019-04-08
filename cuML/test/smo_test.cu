@@ -157,8 +157,8 @@ TEST(SmoSolverTest, KernelCacheNonLinear) {
     CUBLAS_CHECK(cublasCreate(&cublas_handle));
     
     //Polynomial kernel with exponent=2
-    auto nonlin = new polynomialKernel<float,int>(2);
-    for (int z=0;z<16;z++) tile_host_expected[z] = (1+tile_host_expected[z])*(1+tile_host_expected[z]);
+    auto nonlin = new tanhKernel<float>(0.5,2.4);
+    for (int z=0;z<16;z++) tile_host_expected[z] = tanh(tile_host_expected[z]*0.5+2.4);
     KernelCache<float> *cache = 
            new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle, nonlin);
     float *tile_dev = cache->GetTile(ws_idx_dev);
