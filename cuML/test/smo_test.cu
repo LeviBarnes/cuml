@@ -146,6 +146,12 @@ TEST(SmoSolverTest, KernelCacheNonLinear) {
     updateDevice(ws_idx_dev, ws_idx_host, n_ws);
     
     float tile_host[16];
+    float tile_host_expected_linear[] = {
+      26, 32, 38, 44,
+      32, 40, 48, 56,
+      38, 48, 58, 68,
+      44, 56, 68, 80
+    };
     float tile_host_expected[] = {
       26, 32, 38, 44,
       32, 40, 48, 56,
@@ -157,15 +163,47 @@ TEST(SmoSolverTest, KernelCacheNonLinear) {
     CUBLAS_CHECK(cublasCreate(&cublas_handle));
     
     //Polynomial kernel with exponent=2
-    auto nonlin = new tanhKernel<float>(0.5,2.4);
-    for (int z=0;z<16;z++) tile_host_expected[z] = tanh(tile_host_expected[z]*0.5+2.4);
+    SVM::SVMKernelBase<float>* nonlin = new polynomialKernel<float,float>(2,2.4);
+    for (int z=0;z<16;z++) tile_host_expected[z] = (tile_host_expected[z]+2.4)*
+                                                     (tile_host_expected[z]+2.4);
     KernelCache<float> *cache = 
            new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle, nonlin);
     float *tile_dev = cache->GetTile(ws_idx_dev);
     updateHost(tile_host, tile_dev, n_ws*n_rows);
     
     for (int i=0; i<n_ws*n_ws; i++) {
-      EXPECT_EQ(tile_host[i], tile_host_expected[i])<< "First tile " << i;
+      EXPECT_NEAR(tile_host[i], tile_host_expected[i], tile_host_expected[i]*1e-6)<< "Polynomial results " << tile_host[i] << " != " << tile_host_expected[i];
+    }
+
+    //Sigmoid kernel with gain = 0.5, offset = 2.4
+    nonlin = new tanhKernel<float>(0.5,2.4);
+    for (int z=0;z<16;z++) tile_host_expected[z] = tanh(tile_host_expected_linear[z]*0.5+2.4);
+    cache = new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle, nonlin);
+    tile_dev = cache->GetTile(ws_idx_dev);
+    updateHost(tile_host, tile_dev, n_ws*n_rows);
+    
+    for (int i=0; i<n_ws*n_ws; i++) {
+      EXPECT_EQ(tile_host[i], tile_host_expected[i])<< "Sigmoid results " << i;
+    }
+
+    //Radial kernel with gain = 0.5
+    nonlin = new RBFKernel<float>(0.5);
+    for (int z=0;z<n_ws*n_rows;z++) {
+        float val = 0.0;
+        int ws_idx = ws_idx_host[z%n_ws];
+        for (int k=0;k<n_cols;k++) {
+           float tmp = (x_host[ws_idx + k*n_rows] - x_host[z/n_ws + k*n_rows]);
+           val += tmp*tmp;
+           
+        }
+        tile_host_expected[z] = val;
+    }
+    cache = new KernelCache<float>(x_dev, n_rows, n_cols, n_ws, cublas_handle, nonlin);
+    tile_dev = cache->GetTile(ws_idx_dev);
+    updateHost(tile_host, tile_dev, n_ws*n_rows);
+    
+    for (int i=0; i<n_ws*n_ws; i++) {
+      EXPECT_EQ(tile_host[i], tile_host_expected[i])<< "RBF results " << i;
     }
     
     // now check with selecting a subset of the rows

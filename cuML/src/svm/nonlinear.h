@@ -18,6 +18,7 @@
 
 #include <cuda_utils.h>
 #include <linalg/gemm.h>
+#include <distance/distance.h>
 
 namespace ML {
 namespace SVM {
@@ -81,6 +82,35 @@ __global__ void tanh_kernel(math_t *inout, int ld, int rows, int cols,
 } 
 
 template <typename math_t>
+__global__ void rbf_kernel_nopad(math_t *inout, int len, math_t gain)
+{
+   for (int tid=threadIdx.x + blockIdx.x * blockDim.x;
+        tid < len;
+        tid += blockDim.x * gridDim.x)
+   {
+      //TODO Is an explicit integer exponentiation faster?
+      inout[tid] = exp(-gain * inout[tid]);
+   }
+
+} 
+template <typename math_t>
+__global__ void rbf_kernel(math_t *inout, int ld, int rows, int cols, 
+                                  math_t gain)
+{
+   for (int tidy=threadIdx.y + blockIdx.y * blockDim.y;
+        tidy < rows;
+        tidy += blockDim.y * gridDim.y)
+      for (int tidx=threadIdx.x + blockIdx.x * blockDim.x;
+           tidx < cols;
+           tidx += blockDim.x * gridDim.x)
+      {
+         //TODO Is an explicit integer exponentiation faster?
+         inout[tidx + tidy*ld] = exp(-gain * inout[tidx + tidy*ld]);
+      }
+
+} 
+
+template <typename math_t>
 class SVMKernelBase {
 
    public:
@@ -94,6 +124,23 @@ class SVMKernelBase {
       CUBLAS_CHECK(LinAlg::cublasgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, 
                                       n_ws, n_rows, n_cols, &alpha, x1, ld1, 
                                       x2, ld2, &beta, tile, ld_tile          ) );
+   }
+   void distance(const math_t *x1, int ld1, int n_ws, int n_cols, 
+              const math_t *x2, int ld2, int n_rows, math_t *tile, int ld_tile,
+              cublasHandle_t cublas_handle) 
+   {
+      typedef cutlass::Shape<8, 128, 128> OutputTile_t;
+      auto fin_op = [tile] __device__ (math_t d_val, int idx) { 
+        tile[idx] = d_val;
+        return d_val; 
+      };
+      //Note: distance does not accept const pointers for x1 and x2, but does not modify
+      //  the values.
+      Distance::distance <Distance::EucUnexpandedL2,
+                          math_t, math_t, math_t, OutputTile_t> (const_cast<math_t*>(x1), 
+                                                                 const_cast<math_t*>(x2), 
+                                                                 tile, n_ws, n_rows, n_cols, 
+                                                                 NULL, 0, CUBLAS_OP_T, CUBLAS_OP_N);
    }
 
    virtual void operator()(const math_t *x1, int ld1, int n_ws, int n_cols, 
@@ -180,6 +227,46 @@ class tanhKernel : public SVMKernelBase<math_t> {
    {
       SVMKernelBase<math_t>::linear(x1, ld1, n_ws, n_cols, x2, ld2, n_rows, tile, ld_tile, cublas_handle);
       applyKernel(tile, ld_tile, n_ws, n_rows);
+   }
+   void operator()(const math_t *x1, int ld1, int n_ws, int n_cols, 
+              const math_t *x2, int ld2, int n_rows, math_t *tile, int ld_tile,
+              cublasHandle_t cublas_handle)
+   {
+      evaluate(x1,ld1,n_ws,n_cols,x2,ld2,n_rows,tile,ld_tile,cublas_handle);
+   }
+
+
+};
+
+template <typename math_t>
+class RBFKernel : public SVMKernelBase<math_t> {
+
+  math_t gain;
+
+  void applyKernel(math_t* inout, int ld, int rows, int cols)
+  {
+     if (ld == cols)
+        rbf_kernel_nopad<<<ceildiv(rows*cols, 128), 128>>>(inout, rows*cols, gain);
+     else 
+        rbf_kernel<<< dim3(ceildiv(cols,32),ceildiv(rows,4),1),
+                             dim3(32,4,1)                              >>>
+                                         (inout, ld, rows, cols, gain);
+  }
+   public:
+   RBFKernel (math_t gain) : gain(gain) { }
+  /**
+   * @brief Compute the kernel value 
+   * @param [in] x1 [n_ws x n_cols] workspace vectors
+   * @param [in] ld1 
+   * @param [in] x2 [n_rows x n_cols] feature vectors
+   * @param [out] tile buffer for return values [n_ws x n_rows] (should be already allocated)
+   */
+   void evaluate(const math_t *x1, int ld1, int n_ws, int n_cols, 
+              const math_t *x2, int ld2, int n_rows, math_t *tile, int ld_tile,
+              cublasHandle_t cublas_handle)
+   {
+      SVMKernelBase<math_t>::distance(x1, ld1, n_ws, n_cols, x2, ld2, n_rows, tile, ld_tile, cublas_handle);
+      //applyKernel(tile, ld_tile, n_ws, n_rows);
    }
    void operator()(const math_t *x1, int ld1, int n_ws, int n_cols, 
               const math_t *x2, int ld2, int n_rows, math_t *tile, int ld_tile,
