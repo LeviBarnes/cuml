@@ -47,7 +47,8 @@ template <DistanceType distanceType, typename InType, typename AccType, typename
 struct DistanceImpl {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {}
+                FinalLambda fin_op, cublasOperation_t transA, 
+                cublasOperation_t transB, cudaStream_t stream) {}
 };
 
 template <typename InType, typename AccType, typename OutType,
@@ -55,10 +56,11 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucExpandedL2, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op,  cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     euclideanAlgo1<InType, AccType, OutType, OutputTile_>(
       m, n, k, x, y, dist, false, (AccType *)workspace, worksize, fin_op,
-      stream);
+      transA, transB, stream);
   }
 };
 
@@ -67,10 +69,11 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucExpandedL2Sqrt, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op, cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     euclideanAlgo1<InType, AccType, OutType, OutputTile_>(
       m, n, k, x, y, dist, true, (AccType *)workspace, worksize, fin_op,
-      stream);
+      transA, transB, stream);
   }
 };
 
@@ -79,9 +82,10 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucExpandedCosine, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op, cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     cosineAlgo1<InType, AccType, OutType, OutputTile_>(
-      m, n, k, x, y, dist, (AccType *)workspace, worksize, fin_op, stream);
+      m, n, k, x, y, dist, (AccType *)workspace, worksize, fin_op, transA, transB, stream);
   }
 };
 
@@ -90,9 +94,10 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucUnexpandedL2, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op, cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     euclideanAlgo2<InType, AccType, OutType, OutputTile_>(
-      m, n, k, x, y, dist, false, fin_op, stream);
+      m, n, k, x, y, dist, false, fin_op, transA, transB, stream);
   }
 };
 
@@ -101,9 +106,10 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucUnexpandedL2Sqrt, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op, cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     euclideanAlgo2<InType, AccType, OutType, OutputTile_>(
-      m, n, k, x, y, dist, true, fin_op, stream);
+      m, n, k, x, y, dist, true, fin_op, transA, transB, stream);
   }
 };
 
@@ -112,9 +118,10 @@ template <typename InType, typename AccType, typename OutType,
 struct DistanceImpl<EucUnexpandedL1, InType, AccType, OutType, OutputTile_, FinalLambda> {
   void run(InType *x, InType *y, OutType *dist, int m, int n, int k,
                 void *workspace, size_t worksize,
-                FinalLambda fin_op, cudaStream_t stream) {
+                FinalLambda fin_op, cublasOperation_t transA,
+                cublasOperation_t transB, cudaStream_t stream) {
     l1Impl<InType, AccType, OutType, OutputTile_>(
-      m, n, k, x, y, dist, fin_op, stream);
+      m, n, k, x, y, dist, fin_op, transA, transB, stream);
   }
 };
 
@@ -175,9 +182,10 @@ template <DistanceType distanceType,typename InType, typename AccType, typename 
           typename OutputTile_, typename FinalLambda>
 void distance(InType *x, InType *y, OutType *dist, int m, int n, int k,
               void *workspace, size_t worksize,
-              FinalLambda fin_op, cudaStream_t stream = 0) {
+              FinalLambda fin_op, cublasOperation_t transA = CUBLAS_OP_N,
+              cublasOperation_t transB = CUBLAS_OP_T, cudaStream_t stream = 0) {
   DistanceImpl<distanceType, InType, AccType, OutType, OutputTile_, FinalLambda> distImpl;
-  distImpl.run(x, y, dist, m, n, k, workspace, worksize, fin_op, stream);
+  distImpl.run(x, y, dist, m, n, k, workspace, worksize, fin_op, transA, transB, stream);
 }
 
 /**
@@ -203,11 +211,12 @@ template <DistanceType distanceType, typename InType, typename AccType, typename
           typename OutputTile_>
 void distance(InType *x, InType *y, OutType *dist, int m, int n, int k,
               void *workspace,
-              size_t worksize, cudaStream_t stream = 0) {
+              size_t worksize, cublasOperation_t transA = CUBLAS_OP_N, 
+              cublasOperation_t transB = CUBLAS_OP_T, cudaStream_t stream = 0) {
   auto default_fin_op =
       [] __device__(AccType d_val, int g_d_idx) { return d_val; };
   distance<distanceType, InType, AccType, OutType, OutputTile_>(
-    x, y, dist, m, n, k, workspace, worksize, default_fin_op, stream);
+    x, y, dist, m, n, k, workspace, worksize, default_fin_op, transA, transB, stream);
 }
 
 }; // end namespace Distance

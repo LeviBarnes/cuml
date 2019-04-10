@@ -65,7 +65,8 @@ template <typename InType, typename AccType, typename OutType,
 void distanceAlgo1(int m, int n, int k, InType const *pA, InType const *pB,
                    OutType *pD, bool enable_sqrt, AccType *workspace,
                    size_t worksize, FinalLambda fin_op, NormLambda norm_op,
-                   cudaStream_t stream = 0) {
+                   cublasOperation_t transA = CUBLAS_OP_N, 
+                   cublasOperation_t transB = CUBLAS_OP_T, cudaStream_t stream = 0) {
   typedef std::is_same<OutType, bool> is_bool;
   typedef typename std::conditional<is_bool::value, AccType, OutType>::type EffOutType;
   EffOutType* pDCast = reinterpret_cast<EffOutType*>(pD); // Pretend to be EffOutType;
@@ -116,7 +117,7 @@ void distanceAlgo1(int m, int n, int k, InType const *pA, InType const *pB,
                    AccumulatorsPerThread_, MainLoopFunctor_, Index_,
                    GemmConfig_, EpilogueFunctor_, GemmEpilogueTraits_,
                    GemmEpilogue_>(
-    CUBLAS_OP_N, CUBLAS_OP_T, m, n, k, (EffOutType)1, pA, k, pB, k, (EffOutType)0,
+    transA, transB, m, n, k, (EffOutType)1, pA, k, pB, k, (EffOutType)0,
     nullptr, n, pDCast,
     [col_vec, row_vec, enable_sqrt] HD (EpiParams & p) {
       int err = p.initializeExtra(col_vec, row_vec, enable_sqrt);

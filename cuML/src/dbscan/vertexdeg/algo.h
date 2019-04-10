@@ -84,6 +84,7 @@ void launcher(Pack<value_t> data, cudaStream_t stream, int startVertexId, int ba
     		 m, n, k, 											// Cutlass block params
     		 (void*)workspace, workspaceSize, 					// workspace params
     		 dbscan_op, 										// epilogue operator
+                 CUBLAS_OP_N, CUBLAS_OP_T,                                              //default transforms
     		 stream												// cuda stream
 	 );
 
